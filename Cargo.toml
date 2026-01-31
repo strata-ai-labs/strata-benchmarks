@@ -1,0 +1,18 @@
+[package]
+name = "strata-benchmarks"
+version = "0.1.0"
+edition = "2021"
+description = "Black-box tests and performance benchmarks for StrataDB"
+license = "Apache-2.0"
+
+[dependencies]
+stratadb = { git = "https://github.com/strata-systems/strata-core.git", branch = "main" }
+serde_json = "1.0"
+tempfile = "3.8"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "primitives"
+harness = false
