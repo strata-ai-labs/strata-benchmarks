@@ -1,0 +1,181 @@
+{
+  "documents": [
+    {
+      "key": "product:widget-a",
+      "doc": {
+        "name": "Widget A",
+        "sku": "WDG-001",
+        "price": 29.99,
+        "in_stock": true,
+        "tags": ["electronics", "gadget"],
+        "specs": {
+          "weight_g": 150,
+          "dimensions": {"length_cm": 10, "width_cm": 5, "height_cm": 3},
+          "color": "matte black"
+        },
+        "reviews": {
+          "average_score": 4.2,
+          "count": 87
+        }
+      }
+    },
+    {
+      "key": "product:widget-b",
+      "doc": {
+        "name": "Widget B",
+        "sku": "WDG-002",
+        "price": 49.99,
+        "in_stock": false,
+        "tags": ["electronics", "premium"],
+        "specs": {
+          "weight_g": 220,
+          "dimensions": {"length_cm": 12, "width_cm": 6, "height_cm": 4},
+          "color": "silver"
+        },
+        "reviews": {
+          "average_score": 4.7,
+          "count": 203
+        }
+      }
+    },
+    {
+      "key": "product:gadget-x",
+      "doc": {
+        "name": "Gadget X",
+        "sku": "GDG-001",
+        "price": 9.99,
+        "in_stock": true,
+        "tags": ["accessory"],
+        "specs": {
+          "weight_g": 30,
+          "dimensions": {"length_cm": 3, "width_cm": 3, "height_cm": 1},
+          "color": "white"
+        },
+        "reviews": {
+          "average_score": 3.8,
+          "count": 42
+        }
+      }
+    },
+    {
+      "key": "order:10001",
+      "doc": {
+        "customer_id": "user:1001",
+        "status": "shipped",
+        "items": [
+          {"sku": "WDG-001", "quantity": 2, "unit_price": 29.99},
+          {"sku": "GDG-001", "quantity": 1, "unit_price": 9.99}
+        ],
+        "total": 69.97,
+        "shipping": {
+          "method": "express",
+          "tracking": "1Z999AA10123456784",
+          "estimated_delivery": "2024-12-20"
+        },
+        "created_at": "2024-12-15T10:30:00Z"
+      }
+    },
+    {
+      "key": "order:10002",
+      "doc": {
+        "customer_id": "user:1003",
+        "status": "pending",
+        "items": [
+          {"sku": "WDG-002", "quantity": 1, "unit_price": 49.99}
+        ],
+        "total": 49.99,
+        "shipping": {
+          "method": "standard",
+          "tracking": null,
+          "estimated_delivery": "2024-12-28"
+        },
+        "created_at": "2024-12-17T14:15:00Z"
+      }
+    },
+    {
+      "key": "user_profile:1001",
+      "doc": {
+        "name": "Alice Johnson",
+        "email": "alice@example.com",
+        "tier": "premium",
+        "preferences": {
+          "notifications": true,
+          "theme": "dark",
+          "language": "en"
+        },
+        "addresses": [
+          {"type": "home", "city": "San Francisco", "state": "CA", "zip": "94102"},
+          {"type": "work", "city": "Palo Alto", "state": "CA", "zip": "94301"}
+        ]
+      }
+    },
+    {
+      "key": "user_profile:1003",
+      "doc": {
+        "name": "Charlie Brown",
+        "email": "charlie@example.com",
+        "tier": "standard",
+        "preferences": {
+          "notifications": false,
+          "theme": "light",
+          "language": "en"
+        },
+        "addresses": [
+          {"type": "home", "city": "New York", "state": "NY", "zip": "10001"}
+        ]
+      }
+    },
+    {
+      "key": "config:app",
+      "doc": {
+        "version": "2.4.1",
+        "environment": "production",
+        "features": {
+          "search_enabled": true,
+          "vector_search_enabled": true,
+          "branching_enabled": true,
+          "max_branches": 50
+        },
+        "limits": {
+          "max_request_size_bytes": 10485760,
+          "rate_limit_per_minute": 1000,
+          "max_concurrent_connections": 100
+        }
+      }
+    }
+  ],
+  "path_queries": [
+    {"key": "product:widget-a", "path": "name", "expected": "Widget A"},
+    {"key": "product:widget-a", "path": "price", "expected": 29.99},
+    {"key": "product:widget-a", "path": "in_stock", "expected": true},
+    {"key": "product:widget-a", "path": "specs.weight_g", "expected": 150},
+    {"key": "product:widget-a", "path": "specs.dimensions.length_cm", "expected": 10},
+    {"key": "product:widget-a", "path": "specs.color", "expected": "matte black"},
+    {"key": "product:widget-a", "path": "reviews.average_score", "expected": 4.2},
+    {"key": "order:10001", "path": "status", "expected": "shipped"},
+    {"key": "order:10001", "path": "total", "expected": 69.97},
+    {"key": "order:10001", "path": "shipping.tracking", "expected": "1Z999AA10123456784"},
+    {"key": "user_profile:1001", "path": "tier", "expected": "premium"},
+    {"key": "user_profile:1001", "path": "preferences.theme", "expected": "dark"},
+    {"key": "config:app", "path": "version", "expected": "2.4.1"},
+    {"key": "config:app", "path": "features.max_branches", "expected": 50},
+    {"key": "config:app", "path": "limits.rate_limit_per_minute", "expected": 1000}
+  ],
+  "mutations": [
+    {"key": "product:widget-b", "path": "in_stock", "new_value": true},
+    {"key": "product:widget-b", "path": "price", "new_value": 44.99},
+    {"key": "order:10002", "path": "status", "new_value": "shipped"},
+    {"key": "user_profile:1001", "path": "preferences.theme", "new_value": "light"},
+    {"key": "config:app", "path": "features.max_branches", "new_value": 100}
+  ],
+  "deletions": [
+    {"key": "product:gadget-x", "path": "$"},
+    {"key": "user_profile:1001", "path": "preferences.language"}
+  ],
+  "prefixes": {
+    "product:": 3,
+    "order:": 2,
+    "user_profile:": 2,
+    "config:": 1
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "branches": ["branch-alpha", "branch-beta", "branch-gamma"],
+  "per_branch_data": {
+    "branch-alpha": {
+      "kv": [
+        {"key": "env", "value": {"String": "alpha"}},
+        {"key": "setting:mode", "value": {"String": "aggressive"}},
+        {"key": "result:score", "value": {"Float": 0.92}}
+      ],
+      "state": [
+        {"cell": "status", "value": {"String": "complete"}},
+        {"cell": "confidence", "value": {"Float": 0.85}}
+      ],
+      "events": [
+        {"event_type": "step", "payload": {"action": "init", "branch": "alpha"}},
+        {"event_type": "step", "payload": {"action": "analyze", "branch": "alpha"}},
+        {"event_type": "step", "payload": {"action": "conclude", "branch": "alpha"}}
+      ]
+    },
+    "branch-beta": {
+      "kv": [
+        {"key": "env", "value": {"String": "beta"}},
+        {"key": "setting:mode", "value": {"String": "conservative"}},
+        {"key": "result:score", "value": {"Float": 0.78}}
+      ],
+      "state": [
+        {"cell": "status", "value": {"String": "complete"}},
+        {"cell": "confidence", "value": {"Float": 0.62}}
+      ],
+      "events": [
+        {"event_type": "step", "payload": {"action": "init", "branch": "beta"}},
+        {"event_type": "step", "payload": {"action": "analyze", "branch": "beta"}},
+        {"event_type": "step", "payload": {"action": "retry", "branch": "beta"}},
+        {"event_type": "step", "payload": {"action": "conclude", "branch": "beta"}}
+      ]
+    },
+    "branch-gamma": {
+      "kv": [
+        {"key": "env", "value": {"String": "gamma"}},
+        {"key": "setting:mode", "value": {"String": "balanced"}}
+      ],
+      "state": [
+        {"cell": "status", "value": {"String": "in_progress"}},
+        {"cell": "confidence", "value": {"Float": 0.40}}
+      ],
+      "events": [
+        {"event_type": "step", "payload": {"action": "init", "branch": "gamma"}}
+      ]
+    }
+  },
+  "isolation_checks": [
+    {
+      "description": "branch-alpha KV not visible on branch-beta",
+      "on_branch": "branch-beta",
+      "key": "result:score",
+      "expected_value": {"Float": 0.78}
+    },
+    {
+      "description": "branch-beta events not visible on branch-alpha",
+      "on_branch": "branch-alpha",
+      "expected_event_count": 3
+    },
+    {
+      "description": "no branch data visible on default",
+      "on_branch": "default",
+      "key": "env",
+      "expected_value": null
+    }
+  ],
+  "cross_branch_comparison": {
+    "cell": "confidence",
+    "expected": {
+      "branch-alpha": 0.85,
+      "branch-beta": 0.62,
+      "branch-gamma": 0.40
+    },
+    "winner": "branch-alpha"
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "cells": [
+    {"cell": "lock:global", "value": {"String": "free"}},
+    {"cell": "lock:resource_a", "value": {"String": "free"}},
+    {"cell": "lock:resource_b", "value": {"String": "free"}},
+    {"cell": "phase:pipeline", "value": {"String": "idle"}},
+    {"cell": "counter:operations", "value": {"Int": 0}},
+    {"cell": "counter:errors", "value": {"Int": 0}},
+    {"cell": "flag:maintenance", "value": {"Bool": false}},
+    {"cell": "threshold:max_concurrent", "value": {"Int": 10}},
+    {"cell": "status:health", "value": {"String": "green"}},
+    {"cell": "config:batch_size", "value": {"Int": 100}}
+  ],
+  "cas_sequences": [
+    {
+      "cell": "counter:operations",
+      "steps": [
+        {"expected_value": {"Int": 0}, "new_value": {"Int": 1}},
+        {"expected_value": {"Int": 1}, "new_value": {"Int": 2}},
+        {"expected_value": {"Int": 2}, "new_value": {"Int": 3}}
+      ]
+    },
+    {
+      "cell": "phase:pipeline",
+      "steps": [
+        {"expected_value": {"String": "idle"}, "new_value": {"String": "loading"}},
+        {"expected_value": {"String": "loading"}, "new_value": {"String": "processing"}},
+        {"expected_value": {"String": "processing"}, "new_value": {"String": "complete"}}
+      ]
+    },
+    {
+      "cell": "lock:global",
+      "steps": [
+        {"expected_value": {"String": "free"}, "new_value": {"String": "agent-1"}},
+        {"expected_value": {"String": "agent-1"}, "new_value": {"String": "free"}}
+      ]
+    }
+  ],
+  "cas_conflicts": [
+    {
+      "cell": "lock:resource_a",
+      "description": "Two agents racing for the same lock",
+      "setup": {"String": "free"},
+      "agent_1": {"String": "agent-1"},
+      "agent_2": {"String": "agent-2"},
+      "expected_winner": "first_to_cas"
+    }
+  ],
+  "init_cells": [
+    {"cell": "singleton:created_at", "value": {"Int": 1700000000}},
+    {"cell": "singleton:instance_id", "value": {"String": "node-alpha-001"}}
+  ]
+}

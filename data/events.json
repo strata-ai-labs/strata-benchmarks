@@ -1,0 +1,37 @@
+{
+  "events": [
+    {"event_type": "http_request", "payload": {"method": "GET", "path": "/api/users", "status": 200, "latency_ms": 12}},
+    {"event_type": "http_request", "payload": {"method": "POST", "path": "/api/users", "status": 201, "latency_ms": 45}},
+    {"event_type": "http_request", "payload": {"method": "GET", "path": "/api/users/1001", "status": 200, "latency_ms": 8}},
+    {"event_type": "http_request", "payload": {"method": "PUT", "path": "/api/users/1001", "status": 200, "latency_ms": 23}},
+    {"event_type": "http_request", "payload": {"method": "DELETE", "path": "/api/users/1002", "status": 204, "latency_ms": 15}},
+    {"event_type": "http_request", "payload": {"method": "GET", "path": "/api/search", "status": 200, "latency_ms": 340}},
+    {"event_type": "http_request", "payload": {"method": "POST", "path": "/api/upload", "status": 413, "latency_ms": 5}},
+    {"event_type": "error", "payload": {"code": "TIMEOUT", "message": "Connection to ERP timed out after 5000ms", "component": "erp_client"}},
+    {"event_type": "error", "payload": {"code": "VALIDATION", "message": "Field 'email' is required", "component": "user_service"}},
+    {"event_type": "error", "payload": {"code": "AUTH_EXPIRED", "message": "OAuth token expired", "component": "auth_middleware"}},
+    {"event_type": "error", "payload": {"code": "RATE_LIMIT", "message": "429 Too Many Requests from vendor API", "component": "vendor_client"}},
+    {"event_type": "audit", "payload": {"action": "user_created", "actor": "admin@example.com", "target": "user:1002"}},
+    {"event_type": "audit", "payload": {"action": "config_changed", "actor": "system", "target": "config:debug_mode", "old_value": "false", "new_value": "true"}},
+    {"event_type": "audit", "payload": {"action": "branch_created", "actor": "agent-1", "target": "diag/field-mapping"}},
+    {"event_type": "audit", "payload": {"action": "branch_deleted", "actor": "agent-1", "target": "diag/auth-token"}},
+    {"event_type": "metric_snapshot", "payload": {"cpu_percent": 42.3, "memory_mb": 1024, "disk_io_ops": 8400, "timestamp": 1700000060}},
+    {"event_type": "metric_snapshot", "payload": {"cpu_percent": 67.8, "memory_mb": 1180, "disk_io_ops": 12300, "timestamp": 1700000120}},
+    {"event_type": "metric_snapshot", "payload": {"cpu_percent": 23.1, "memory_mb": 950, "disk_io_ops": 3200, "timestamp": 1700000180}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-001", "status": "started", "type": "analyze"}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-001", "status": "completed", "type": "analyze", "duration_ms": 3400}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-002", "status": "started", "type": "generate"}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-002", "status": "failed", "type": "generate", "error": "template_not_found"}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-003", "status": "started", "type": "notify"}},
+    {"event_type": "task_lifecycle", "payload": {"task_id": "task-003", "status": "completed", "type": "notify", "duration_ms": 120}}
+  ],
+  "expected_counts": {
+    "http_request": 7,
+    "error": 4,
+    "audit": 4,
+    "metric_snapshot": 3,
+    "task_lifecycle": 6,
+    "nonexistent_type": 0
+  },
+  "total": 24
+}
