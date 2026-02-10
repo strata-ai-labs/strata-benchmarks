@@ -21,6 +21,9 @@ target
 #.idea/
 
 
+# Benchmark result JSON files (keep .gitkeep)
+results/*.json
+
 # Added by cargo
 
 /target

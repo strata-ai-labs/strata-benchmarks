@@ -4,17 +4,22 @@
 //! All benchmarks report latency percentiles.
 
 #[allow(unused)]
-#[path = "harness/mod.rs"]
+#[path = "../harness/mod.rs"]
 mod harness;
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, BenchmarkId, Criterion, Throughput};
+use harness::recorder::ResultRecorder;
 use harness::{
     create_db, measure_with_counters, report_counters, report_percentiles, vector_128d,
     DurabilityConfig, PERCENTILE_SAMPLES, WARMUP_COUNT,
 };
 use stratadb::DistanceMetric;
+
+static RECORDER: Mutex<Option<ResultRecorder>> = Mutex::new(None);
 
 fn vector_upsert(c: &mut Criterion) {
     let mut group = c.benchmark_group("vector/upsert");
@@ -54,6 +59,12 @@ fn vector_upsert(c: &mut Criterion) {
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, samples as u64);
+
+        if let Some(rec) = RECORDER.lock().unwrap().as_mut() {
+            let mut params = HashMap::new();
+            params.insert("durability".into(), serde_json::json!(mode.label()));
+            rec.record_latency(&label, params, &p, Some(&counters), samples as u64);
+        }
     }
     group.finish();
 }
@@ -98,6 +109,12 @@ fn vector_search(c: &mut Criterion) {
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, 200);
+
+        if let Some(rec) = RECORDER.lock().unwrap().as_mut() {
+            let mut params = HashMap::new();
+            params.insert("durability".into(), serde_json::json!(mode.label()));
+            rec.record_latency(&label, params, &p, Some(&counters), 200);
+        }
     }
     group.finish();
 }
@@ -142,9 +159,22 @@ fn vector_get(c: &mut Criterion) {
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, PERCENTILE_SAMPLES as u64);
+
+        if let Some(rec) = RECORDER.lock().unwrap().as_mut() {
+            let mut params = HashMap::new();
+            params.insert("durability".into(), serde_json::json!(mode.label()));
+            rec.record_latency(&label, params, &p, Some(&counters), PERCENTILE_SAMPLES as u64);
+        }
     }
     group.finish();
 }
 
 criterion_group!(benches, vector_upsert, vector_search, vector_get);
-criterion_main!(benches);
+
+fn main() {
+    *RECORDER.lock().unwrap() = Some(ResultRecorder::new("latency"));
+    benches();
+    if let Some(recorder) = RECORDER.lock().unwrap().take() {
+        let _ = recorder.save();
+    }
+}

@@ -17,36 +17,49 @@ tempfile = "3.8"
 
 [[bench]]
 name = "kv"
+path = "benches/latency/kv.rs"
 harness = false
 
 [[bench]]
 name = "state"
+path = "benches/latency/state.rs"
 harness = false
 
 [[bench]]
 name = "event"
+path = "benches/latency/event.rs"
 harness = false
 
 [[bench]]
 name = "json"
+path = "benches/latency/json.rs"
 harness = false
 
 [[bench]]
 name = "vector"
+path = "benches/latency/vector.rs"
 harness = false
 
 [[bench]]
 name = "branch"
+path = "benches/latency/branch.rs"
 harness = false
 
 [[bench]]
-name = "scaling"
+name = "concurrency"
+path = "benches/concurrency/concurrency.rs"
 harness = false
 
 [[bench]]
 name = "redis_compare"
+path = "benches/redis-compare/redis_compare.rs"
 harness = false
 
 [[bench]]
 name = "fill_level"
+path = "benches/fill-level/fill_level.rs"
 harness = false
+
+[[bin]]
+name = "bench-compare"
+path = "src/bin/compare.rs"

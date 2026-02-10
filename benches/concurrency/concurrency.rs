@@ -3,20 +3,23 @@
 //! Multi-threaded scaling benchmarks that measure throughput as a function of
 //! thread count. Separate from the Criterion-based single-thread benchmarks.
 //!
-//! Run: `cargo bench --bench scaling`
-//! Quick: `cargo bench --bench scaling -- --threads 1,2,4`
+//! Run: `cargo bench --bench concurrency`
+//! Quick: `cargo bench --bench concurrency -- --threads 1,2,4`
 
 #[allow(unused)]
-#[path = "harness/mod.rs"]
+#[path = "../harness/mod.rs"]
 mod harness;
 
+use harness::recorder::ResultRecorder;
 use harness::scaling::{
     parse_thread_counts, physical_cores, print_table_header, print_table_row,
-    run_scaling_experiment, ReservoirSampler, ThreadResult,
+    run_scaling_experiment, ReservoirSampler, ScalingResult, ThreadResult,
 };
 use harness::{create_db, DurabilityConfig};
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
+use strata_benchmarks::schema::{BenchmarkMetrics, BenchmarkResult};
 use stratadb::Value;
 
 // ---------------------------------------------------------------------------
@@ -42,11 +45,46 @@ fn fast_rand(state: &mut u64) -> u64 {
     *state >> 33
 }
 
+fn record_scaling_result(
+    recorder: &mut ResultRecorder,
+    workload: &str,
+    mode: &DurabilityConfig,
+    result: &ScalingResult,
+) {
+    let mut params = HashMap::new();
+    params.insert("durability".into(), serde_json::json!(mode.label()));
+    params.insert("workload".into(), serde_json::json!(workload));
+
+    recorder.record(BenchmarkResult {
+        benchmark: format!("concurrency/{}/{}/{}t", workload, mode.label(), result.threads),
+        category: "concurrency".to_string(),
+        parameters: params,
+        metrics: BenchmarkMetrics {
+            ops_per_sec: Some(result.ops_per_sec),
+            p50_ns: Some(result.p50.as_nanos() as u64),
+            p95_ns: Some(result.p95.as_nanos() as u64),
+            p99_ns: Some(result.p99.as_nanos() as u64),
+            samples: Some(result.total_ops),
+            threads: Some(result.threads),
+            abort_rate_pct: if result.abort_rate_pct > 0.0 {
+                Some(result.abort_rate_pct)
+            } else {
+                None
+            },
+            ..Default::default()
+        },
+    });
+}
+
 // ---------------------------------------------------------------------------
 // Workload: KV GET (read-only, no contention)
 // ---------------------------------------------------------------------------
 
-fn run_kv_get_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
+fn run_kv_get_scaling(
+    thread_sweep: &[usize],
+    mode: DurabilityConfig,
+    recorder: &mut ResultRecorder,
+) {
     eprintln!(
         "\n=== KV GET (read-only, no contention) | durability: {} ===",
         mode.label()
@@ -90,6 +128,7 @@ fn run_kv_get_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
                 }
             });
         print_table_row(&result);
+        record_scaling_result(recorder, "kv_get", &mode, &result);
     }
 }
 
@@ -97,7 +136,11 @@ fn run_kv_get_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
 // Workload: KV PUT (independent keys, no contention)
 // ---------------------------------------------------------------------------
 
-fn run_kv_put_independent_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
+fn run_kv_put_independent_scaling(
+    thread_sweep: &[usize],
+    mode: DurabilityConfig,
+    recorder: &mut ResultRecorder,
+) {
     eprintln!(
         "\n=== KV PUT (independent keys, no contention) | durability: {} ===",
         mode.label()
@@ -131,6 +174,7 @@ fn run_kv_put_independent_scaling(thread_sweep: &[usize], mode: DurabilityConfig
                 }
             });
         print_table_row(&result);
+        record_scaling_result(recorder, "kv_put_independent", &mode, &result);
     }
 }
 
@@ -138,7 +182,11 @@ fn run_kv_put_independent_scaling(thread_sweep: &[usize], mode: DurabilityConfig
 // Workload: KV PUT (hot key, maximum contention)
 // ---------------------------------------------------------------------------
 
-fn run_kv_put_hot_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
+fn run_kv_put_hot_scaling(
+    thread_sweep: &[usize],
+    mode: DurabilityConfig,
+    recorder: &mut ResultRecorder,
+) {
     eprintln!(
         "\n=== KV PUT (hot key, maximum contention) | durability: {} ===",
         mode.label()
@@ -183,6 +231,7 @@ fn run_kv_put_hot_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
                 }
             });
         print_table_row(&result);
+        record_scaling_result(recorder, "kv_put_hot", &mode, &result);
     }
 }
 
@@ -190,7 +239,11 @@ fn run_kv_put_hot_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
 // Workload: Mixed 90/10 (90% get, 10% put, low contention)
 // ---------------------------------------------------------------------------
 
-fn run_mixed_90_10_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
+fn run_mixed_90_10_scaling(
+    thread_sweep: &[usize],
+    mode: DurabilityConfig,
+    recorder: &mut ResultRecorder,
+) {
     eprintln!(
         "\n=== MIXED 90/10 (90% get, 10% put, low contention) | durability: {} ===",
         mode.label()
@@ -245,6 +298,7 @@ fn run_mixed_90_10_scaling(thread_sweep: &[usize], mode: DurabilityConfig) {
                 }
             });
         print_table_row(&result);
+        record_scaling_result(recorder, "mixed_90_10", &mode, &result);
     }
 }
 
@@ -284,12 +338,15 @@ fn main() {
     );
     eprintln!();
 
+    let mut recorder = ResultRecorder::new("concurrency");
+
     for mode in durability_modes() {
-        run_kv_get_scaling(&thread_sweep, mode);
-        run_kv_put_independent_scaling(&thread_sweep, mode);
-        run_kv_put_hot_scaling(&thread_sweep, mode);
-        run_mixed_90_10_scaling(&thread_sweep, mode);
+        run_kv_get_scaling(&thread_sweep, mode, &mut recorder);
+        run_kv_put_independent_scaling(&thread_sweep, mode, &mut recorder);
+        run_kv_put_hot_scaling(&thread_sweep, mode, &mut recorder);
+        run_mixed_90_10_scaling(&thread_sweep, mode, &mut recorder);
     }
 
     eprintln!("\n=== Benchmark complete ===");
+    let _ = recorder.save();
 }

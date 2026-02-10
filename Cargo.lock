@@ -843,7 +843,7 @@ dependencies = [
 [[package]]
 name = "strata-concurrency"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "chrono",
  "dashmap",
@@ -860,7 +860,7 @@ dependencies = [
 [[package]]
 name = "strata-core"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "bincode",
  "chrono",
@@ -873,7 +873,7 @@ dependencies = [
 [[package]]
 name = "strata-durability"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "crc32fast",
  "parking_lot",
@@ -892,7 +892,7 @@ dependencies = [
 [[package]]
 name = "strata-engine"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "base64",
  "byteorder",
@@ -916,7 +916,7 @@ dependencies = [
 [[package]]
 name = "strata-executor"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "base64",
  "rmp-serde",
@@ -932,7 +932,7 @@ dependencies = [
 [[package]]
 name = "strata-intelligence"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "dashmap",
  "serde",
@@ -944,7 +944,7 @@ dependencies = [
 [[package]]
 name = "strata-storage"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "dashmap",
  "rustc-hash",
@@ -955,7 +955,7 @@ dependencies = [
 [[package]]
 name = "stratadb"
 version = "0.1.0"
-source = "git+https://github.com/strata-systems/strata-core.git?branch=main#f38cc654389c5306fbe8cd88a2054f8da207586a"
+source = "git+https://github.com/strata-systems/strata-core.git?branch=main#ce2b7aca4587d8f5132f2659419567f56bf80397"
 dependencies = [
  "serde_json",
  "strata-executor",

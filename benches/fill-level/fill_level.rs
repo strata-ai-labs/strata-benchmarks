@@ -16,12 +16,14 @@
 //! Single: `cargo bench --bench fill_level -- -t kv_put`
 
 #[allow(unused)]
-#[path = "harness/mod.rs"]
+#[path = "../harness/mod.rs"]
 mod harness;
 
+use harness::recorder::ResultRecorder;
 use harness::{create_db, kv_value, print_hardware_info, BenchDb, DurabilityConfig};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use strata_benchmarks::schema::{BenchmarkMetrics, BenchmarkResult};
 use stratadb::Value;
 
 // ---------------------------------------------------------------------------
@@ -103,6 +105,38 @@ fn fill_database(db: &BenchDb, count: usize) {
             eprintln!("  filled {}/{} keys...", i + 1, count);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Recording helper
+// ---------------------------------------------------------------------------
+
+fn record_fill_result(
+    recorder: &mut ResultRecorder,
+    r: &FillResult,
+    mode: &DurabilityConfig,
+) {
+    let mut params = HashMap::new();
+    params.insert("durability".into(), serde_json::json!(mode.label()));
+    params.insert("fill_level".into(), serde_json::json!(r.fill_level));
+
+    recorder.record(BenchmarkResult {
+        benchmark: format!("fill-level/{}/{}keys", r.name, r.fill_level),
+        category: "fill-level".to_string(),
+        parameters: params,
+        metrics: BenchmarkMetrics {
+            ops_per_sec: Some(r.ops_per_sec),
+            p50_ns: Some(r.p50.as_nanos() as u64),
+            p95_ns: Some(r.p95.as_nanos() as u64),
+            p99_ns: Some(r.p99.as_nanos() as u64),
+            min_ns: Some(r.min.as_nanos() as u64),
+            max_ns: Some(r.max.as_nanos() as u64),
+            avg_ns: Some(r.avg.as_nanos() as u64),
+            samples: Some(r.total_ops as u64),
+            fill_level: Some(r.fill_level),
+            ..Default::default()
+        },
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -420,6 +454,8 @@ fn main() {
         print_csv_header();
     }
 
+    let mut recorder = ResultRecorder::new("fill-level");
+
     for test_name in ALL_TESTS {
         if !test_is_selected(test_name, &config.tests) {
             continue;
@@ -438,6 +474,7 @@ fn main() {
                 if !config.csv && !config.quiet {
                     eprintln!(" done");
                 }
+                record_fill_result(&mut recorder, &result, &config.durability);
                 results.push(result);
                 continue;
             }
@@ -460,6 +497,7 @@ fn main() {
                 _ => unreachable!(),
             };
 
+            record_fill_result(&mut recorder, &result, &config.durability);
             results.push(result);
         }
 
@@ -486,4 +524,5 @@ fn main() {
     if !config.csv {
         eprintln!("=== Benchmark complete ===");
     }
+    let _ = recorder.save();
 }

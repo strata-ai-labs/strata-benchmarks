@@ -4,6 +4,7 @@
 //! and configuration types used across all primitive benchmark files.
 
 pub mod metrics;
+pub mod recorder;
 pub mod scaling;
 
 use std::collections::HashMap;
@@ -49,7 +50,7 @@ pub fn print_hardware_info() {
     });
 }
 
-fn read_cpu_model() -> String {
+pub fn read_cpu_model() -> String {
     #[cfg(target_os = "linux")]
     {
         if let Ok(contents) = std::fs::read_to_string("/proc/cpuinfo") {
@@ -77,7 +78,7 @@ fn read_cpu_model() -> String {
     "unknown".to_string()
 }
 
-fn read_total_ram_gb() -> u64 {
+pub fn read_total_ram_gb() -> u64 {
     #[cfg(target_os = "linux")]
     {
         if let Ok(contents) = std::fs::read_to_string("/proc/meminfo") {

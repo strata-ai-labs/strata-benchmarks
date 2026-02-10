@@ -13,12 +13,14 @@
 //! CSV:  `cargo bench --bench redis_compare -- --csv`
 
 #[allow(unused)]
-#[path = "harness/mod.rs"]
+#[path = "../harness/mod.rs"]
 mod harness;
 
+use harness::recorder::ResultRecorder;
 use harness::{create_db, print_hardware_info, BenchDb, DurabilityConfig};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+use strata_benchmarks::schema::{BenchmarkMetrics, BenchmarkResult};
 use stratadb::{Command, Value};
 
 // ---------------------------------------------------------------------------
@@ -222,6 +224,33 @@ fn print_csv_row(r: &BenchResult) {
         duration_ms(r.p99),
         duration_ms(r.max),
     );
+}
+
+// ---------------------------------------------------------------------------
+// Recording helper
+// ---------------------------------------------------------------------------
+
+fn record_redis_result(recorder: &mut ResultRecorder, r: &BenchResult, mode: &DurabilityConfig) {
+    let mut params = HashMap::new();
+    params.insert("durability".into(), serde_json::json!(mode.label()));
+    params.insert("redis_equiv".into(), serde_json::json!(r.redis_equiv));
+
+    recorder.record(BenchmarkResult {
+        benchmark: format!("redis-compare/{}/{}", r.name, mode.label()),
+        category: "redis-compare".to_string(),
+        parameters: params,
+        metrics: BenchmarkMetrics {
+            ops_per_sec: Some(r.ops_per_sec),
+            p50_ns: Some(r.p50.as_nanos() as u64),
+            p95_ns: Some(r.p95.as_nanos() as u64),
+            p99_ns: Some(r.p99.as_nanos() as u64),
+            min_ns: Some(r.min.as_nanos() as u64),
+            max_ns: Some(r.max.as_nanos() as u64),
+            avg_ns: Some(r.avg_latency.as_nanos() as u64),
+            samples: Some(r.total_ops as u64),
+            ..Default::default()
+        },
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -531,6 +560,8 @@ fn main() {
         print_csv_header();
     }
 
+    let mut recorder = ResultRecorder::new("redis-compare");
+
     for mode in &config.durability {
         if !config.csv {
             let redis_equiv = match mode {
@@ -556,48 +587,56 @@ fn main() {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_ping(&bench_db, config.requests, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("SET", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_set(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("GET", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_get(&bench_db, config.requests, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("INCR", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_incr(&bench_db, config.requests, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("HSET", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_hset(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("MSET", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_mset_10(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("XADD", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_xadd(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("LRANGE", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_lrange_100(*mode, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         // --- Strata-unique bonus tests ---
@@ -606,24 +645,28 @@ fn main() {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_state_set(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("STATE_READ", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_state_read(&bench_db, config.requests, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("EVENT_READ", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_event_read(&bench_db, config.requests, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         if test_is_selected("KV_DELETE", &config.tests) {
             let mut kg = KeyGen::new(config.keyspace);
             let result = bench_kv_delete(&bench_db, config.requests, &data, &mut kg);
             print_result(&result, &config);
+            record_redis_result(&mut recorder, &result, mode);
         }
 
         // List skipped Redis tests
@@ -639,6 +682,7 @@ fn main() {
     if !config.csv {
         eprintln!("=== Benchmark complete ===");
     }
+    let _ = recorder.save();
 }
 
 fn print_result(result: &BenchResult, config: &Config) {

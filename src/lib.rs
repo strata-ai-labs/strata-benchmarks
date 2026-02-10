@@ -3,4 +3,6 @@
 // This crate depends on `stratadb` as an external git dependency and exercises
 // only the public API. No internal crates are imported.
 
+pub mod schema;
+
 pub use stratadb;
