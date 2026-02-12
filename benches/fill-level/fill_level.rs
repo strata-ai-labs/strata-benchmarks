@@ -227,7 +227,7 @@ fn bench_state_read(db: &BenchDb, n: usize, fill_level: usize) -> FillResult {
     let mut i = 0u64;
     run_bench("state_read", fill_level, n, || {
         let cell = format!("rcell:{:012}", i % 100);
-        let _ = db.db.state_read(&cell).unwrap();
+        let _ = db.db.state_get(&cell).unwrap();
         i += 1;
     })
 }
@@ -263,7 +263,7 @@ fn bench_event_read(db: &BenchDb, n: usize, fill_level: usize) -> FillResult {
             .wrapping_mul(6364136223846793005)
             .wrapping_add(1442695040888963407);
         let seq = (rng >> 33) % 1000 + 1; // 1-indexed
-        let _ = db.db.event_read(seq).unwrap();
+        let _ = db.db.event_get(seq).unwrap();
     })
 }
 

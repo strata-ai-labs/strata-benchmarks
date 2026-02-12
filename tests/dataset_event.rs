@@ -35,7 +35,7 @@ fn read_back_each_event() {
     // Read back each event by its sequence number — VersionedValue has
     // value/version/timestamp but not event_type, so we verify the payload.
     for (i, seq) in seqs.iter().enumerate() {
-        let entry = db.event_read(*seq).unwrap();
+        let entry = db.event_get(*seq).unwrap();
         assert!(entry.is_some(), "event at seq {} should exist", seq);
         let entry = entry.unwrap();
         let expected = json_to_value(&ds.events[i].payload);
@@ -57,7 +57,7 @@ fn filter_by_type_counts() {
     }
 
     for (event_type, expected_count) in &ds.expected_counts {
-        let filtered = db.event_read_by_type(event_type).unwrap();
+        let filtered = db.event_get_by_type(event_type).unwrap();
         assert_eq!(
             filtered.len(),
             *expected_count,
@@ -78,7 +78,7 @@ fn nonexistent_type_returns_empty() {
         db.event_append(&event.event_type, json_to_value(&event.payload)).unwrap();
     }
 
-    let empty = db.event_read_by_type("nonexistent_type").unwrap();
+    let empty = db.event_get_by_type("nonexistent_type").unwrap();
     assert_eq!(empty.len(), 0);
 }
 
@@ -94,7 +94,7 @@ fn event_payloads_match() {
     }
 
     for (i, seq) in seqs.iter().enumerate() {
-        let event = db.event_read(*seq).unwrap().unwrap();
+        let event = db.event_get(*seq).unwrap().unwrap();
         let expected = json_to_value(&ds.events[i].payload);
         assert_eq!(
             event.value, expected,

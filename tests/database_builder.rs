@@ -190,7 +190,7 @@ fn exercise_all_primitives(strata: &Strata) {
 
     // State
     strata.state_set("cell", 42i64).unwrap();
-    assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(42)));
+    assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(42)));
 
     // Event
     strata.event_append("stream", Value::Object(
@@ -301,7 +301,7 @@ fn always_mode_all_primitives_survive_graceful_reopen() {
         let strata = Strata::from_database(db).unwrap();
 
         assert_eq!(strata.kv_get("k").unwrap(), Some(Value::String("v".into())));
-        assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(42)));
+        assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(42)));
         assert_eq!(strata.event_len().unwrap(), 1);
         assert!(strata.json_get("doc", "f").unwrap().is_some());
     }
@@ -333,7 +333,7 @@ fn always_mode_survives_crash_without_flush() {
             "Always mode should survive crash (fsync on every commit)"
         );
         assert_eq!(
-            strata.state_read("crash-cell").unwrap(),
+            strata.state_get("crash-cell").unwrap(),
             Some(Value::Int(99)),
             "State should also survive crash in always mode"
         );
@@ -394,7 +394,7 @@ fn always_mode_all_primitives_survive_crash() {
 
         assert_eq!(strata.kv_get("k").unwrap(), Some(Value::String("v".into())),
             "KV should survive crash in always mode");
-        assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(42)),
+        assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(42)),
             "State should survive crash in always mode");
         assert_eq!(strata.event_len().unwrap(), 1,
             "Events should survive crash in always mode");
@@ -463,7 +463,7 @@ fn recovery_is_idempotent() {
         let db = Database::open(dir.path()).unwrap();
         let strata = Strata::from_database(db).unwrap();
         assert_eq!(strata.kv_get("key").unwrap(), Some(Value::String("value".into())));
-        assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(1)));
+        assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(1)));
         // drop without flush — simulates repeated crashes
     }
 }

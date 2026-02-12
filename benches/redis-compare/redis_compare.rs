@@ -295,7 +295,7 @@ fn bench_get(db: &BenchDb, n: usize, keygen: &mut KeyGen) -> BenchResult {
 fn bench_incr(db: &BenchDb, n: usize, keygen: &mut KeyGen) -> BenchResult {
     run_bench("INCR", "INCR (state_read+state_set)", n, |kg| {
         let cell = kg.key("counter");
-        let current = db.db.state_read(&cell).unwrap();
+        let current = db.db.state_get(&cell).unwrap();
         let val = match current {
             Some(Value::Int(v)) => v,
             _ => 0,
@@ -396,7 +396,7 @@ fn bench_state_read(db: &BenchDb, n: usize, keygen: &mut KeyGen) -> BenchResult 
 
     run_bench("STATE_READ", "(Strata unique)", n, |kg| {
         let cell = kg.key("rcell");
-        let _ = db.db.state_read(&cell).unwrap();
+        let _ = db.db.state_get(&cell).unwrap();
     }, keygen)
 }
 
@@ -413,7 +413,7 @@ fn bench_event_read(db: &BenchDb, n: usize, keygen: &mut KeyGen) -> BenchResult 
 
     run_bench("EVENT_READ", "(Strata unique)", n, |kg| {
         let seq = (kg.next_rand() % event_count) + 1;
-        let _ = db.db.event_read(seq).unwrap();
+        let _ = db.db.event_get(seq).unwrap();
     }, keygen)
 }
 

@@ -1,17 +1,17 @@
 //! Black-box tests for branch API capabilities.
 //!
 //! Tests `branch_get()`, `branch_exists()`, versioned `branch_list()`,
-//! `branches()` power API, NotImplemented stubs, and bundle export/import.
+//! `branches()` power API, fork/diff, and bundle export/import.
 
 use std::collections::HashMap;
-use stratadb::{Error, Strata, Value};
+use stratadb::{Strata, Value};
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 fn disk_db(path: &str) -> Strata {
@@ -200,35 +200,23 @@ fn branches_api_delete_default_fails() {
 }
 
 // =============================================================================
-// Section 5: NotImplemented stubs
+// Section 5: Fork and diff (now implemented)
 // =============================================================================
 
 #[test]
-fn fork_returns_not_implemented() {
+fn fork_branch_succeeds() {
     let db = db();
-    let result = db.fork_branch("destination");
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::NotImplemented { feature, .. } => {
-            assert_eq!(feature, "fork_branch");
-        }
-        other => panic!("Expected NotImplemented, got: {:?}", other),
-    }
+    // Fork creates a new branch from default
+    let result = db.fork_branch("forked");
+    assert!(result.is_ok(), "fork_branch should succeed: {:?}", result.err());
 }
 
 #[test]
-fn diff_returns_not_implemented() {
+fn diff_nonexistent_branches_fails() {
     let db = db();
+    // Diff of non-existent branches should return an error (but not NotImplemented)
     let result = db.branches().diff("a", "b");
-    assert!(result.is_err());
-
-    match result.unwrap_err() {
-        Error::NotImplemented { feature, .. } => {
-            assert_eq!(feature, "diff_branches");
-        }
-        other => panic!("Expected NotImplemented, got: {:?}", other),
-    }
+    assert!(result.is_err(), "diff of non-existent branches should fail");
 }
 
 // =============================================================================
@@ -437,12 +425,12 @@ fn import_multi_primitive_roundtrip() {
 
     // Verify State
     assert_eq!(
-        db_b.state_read("counter").unwrap(),
+        db_b.state_get("counter").unwrap(),
         Some(Value::Int(42))
     );
 
     // Verify Event
-    let events = db_b.event_read_by_type("audit").unwrap();
+    let events = db_b.event_get_by_type("audit").unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].value, payload);
 

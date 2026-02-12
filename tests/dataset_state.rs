@@ -21,7 +21,7 @@ fn set_and_read_all_cells() {
     }
 
     for cell in &ds.cells {
-        let got = db.state_read(&cell.cell).unwrap();
+        let got = db.state_get(&cell.cell).unwrap();
         assert_eq!(
             got,
             Some(cell.value.to_value()),
@@ -54,7 +54,7 @@ fn cas_sequence_counter_increment() {
         ver = result.unwrap();
     }
 
-    let final_val = db.state_read(&seq.cell).unwrap().unwrap();
+    let final_val = db.state_get(&seq.cell).unwrap().unwrap();
     let last_step = seq.steps.last().unwrap();
     assert_eq!(final_val, last_step.new_value.to_value());
 }
@@ -80,7 +80,7 @@ fn cas_sequence_phase_transitions() {
         ver = result.unwrap();
     }
 
-    let final_val = db.state_read(&seq.cell).unwrap().unwrap();
+    let final_val = db.state_get(&seq.cell).unwrap().unwrap();
     assert_eq!(final_val, stratadb::Value::String("complete".into()));
 }
 
@@ -105,14 +105,14 @@ fn cas_sequence_lock_acquire_release() {
     assert!(result.is_some(), "lock acquire failed");
     let ver2 = result.unwrap();
 
-    let locked = db.state_read(&seq.cell).unwrap().unwrap();
+    let locked = db.state_get(&seq.cell).unwrap().unwrap();
     assert_eq!(locked, stratadb::Value::String("agent-1".into()));
 
     // Release lock
     let result = db.state_cas(&seq.cell, Some(ver2), seq.steps[1].new_value.to_value()).unwrap();
     assert!(result.is_some(), "lock release failed");
 
-    let free = db.state_read(&seq.cell).unwrap().unwrap();
+    let free = db.state_get(&seq.cell).unwrap().unwrap();
     assert_eq!(free, stratadb::Value::String("free".into()));
 }
 
@@ -141,7 +141,7 @@ fn cas_conflict_wrong_version() {
     assert!(result.is_none(), "CAS should fail with stale version");
 
     // Lock should still be held by agent-1
-    let val = db.state_read(&conflict.cell).unwrap().unwrap();
+    let val = db.state_get(&conflict.cell).unwrap().unwrap();
     assert_eq!(val, stratadb::Value::String("agent-1".into()));
 }
 
@@ -155,7 +155,7 @@ fn init_creates_new_cells() {
     }
 
     for init in &ds.init_cells {
-        let got = db.state_read(&init.cell).unwrap().unwrap();
+        let got = db.state_get(&init.cell).unwrap().unwrap();
         assert_eq!(got, init.value.to_value(), "init cell mismatch: {}", init.cell);
     }
 }
@@ -173,7 +173,7 @@ fn init_is_idempotent() {
     assert_eq!(v1, v2, "idempotent init should return same version");
 
     // Original value should be preserved (not overwritten)
-    let got = db.state_read(&init.cell).unwrap().unwrap();
+    let got = db.state_get(&init.cell).unwrap().unwrap();
     assert_eq!(got, init.value.to_value());
 }
 
@@ -190,9 +190,9 @@ fn cells_are_independent() {
     db.state_set("counter:operations", stratadb::Value::Int(999)).unwrap();
 
     // Other cells should be unaffected
-    let health = db.state_read("status:health").unwrap().unwrap();
+    let health = db.state_get("status:health").unwrap().unwrap();
     assert_eq!(health, stratadb::Value::String("green".into()));
 
-    let batch = db.state_read("config:batch_size").unwrap().unwrap();
+    let batch = db.state_get("config:batch_size").unwrap().unwrap();
     assert_eq!(batch, stratadb::Value::Int(100));
 }

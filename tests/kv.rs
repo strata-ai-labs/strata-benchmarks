@@ -5,7 +5,7 @@
 use stratadb::{Strata, Value};
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 // =============================================================================

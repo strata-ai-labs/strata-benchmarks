@@ -71,7 +71,7 @@ fn event_read(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("durability", mode.label()), |b| {
             b.iter(|| {
                 let seq = counter.fetch_add(1, Ordering::Relaxed) % WARMUP_COUNT;
-                bench_db.db.event_read(seq).unwrap();
+                bench_db.db.event_get(seq).unwrap();
             });
         });
 
@@ -79,7 +79,7 @@ fn event_read(c: &mut Criterion) {
         let label = format!("event/read/{}", mode.label());
         let (p, counters) = measure_with_counters(&bench_db, PERCENTILE_SAMPLES, || {
             let seq = pct_counter.fetch_add(1, Ordering::Relaxed) % WARMUP_COUNT;
-            bench_db.db.event_read(seq).unwrap();
+            bench_db.db.event_get(seq).unwrap();
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, PERCENTILE_SAMPLES as u64);
@@ -109,13 +109,13 @@ fn event_read_by_type(c: &mut Criterion) {
         }
         group.bench_function(BenchmarkId::new("durability", mode.label()), |b| {
             b.iter(|| {
-                bench_db.db.event_read_by_type("type_a").unwrap();
+                bench_db.db.event_get_by_type("type_a").unwrap();
             });
         });
 
         let label = format!("event/read_by_type/{}", mode.label());
         let (p, counters) = measure_with_counters(&bench_db, PERCENTILE_SAMPLES, || {
-            bench_db.db.event_read_by_type("type_a").unwrap();
+            bench_db.db.event_get_by_type("type_a").unwrap();
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, PERCENTILE_SAMPLES as u64);

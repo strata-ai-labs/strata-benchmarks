@@ -3,7 +3,7 @@
 use stratadb::{Strata, Value};
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 // =============================================================================
@@ -155,12 +155,12 @@ fn state_isolated_between_branches() {
     db.create_branch("other").unwrap();
     db.set_branch("other").unwrap();
 
-    assert_eq!(db.state_read("cell").unwrap(), None);
+    assert_eq!(db.state_get("cell").unwrap(), None);
 
     db.state_set("cell", "other").unwrap();
 
     db.set_branch("default").unwrap();
-    assert_eq!(db.state_read("cell").unwrap(), Some(Value::String("default".into())));
+    assert_eq!(db.state_get("cell").unwrap(), Some(Value::String("default".into())));
 }
 
 // =============================================================================

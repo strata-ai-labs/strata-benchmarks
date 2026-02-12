@@ -3,7 +3,7 @@
 use stratadb::Strata;
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 // =============================================================================
@@ -113,7 +113,7 @@ fn all_primitives_persist() {
     {
         let db = Strata::open(path).unwrap();
         assert_eq!(db.kv_get("kv-key").unwrap(), Some(stratadb::Value::String("kv-value".into())));
-        assert_eq!(db.state_read("state-cell").unwrap(), Some(stratadb::Value::Int(42)));
+        assert_eq!(db.state_get("state-cell").unwrap(), Some(stratadb::Value::Int(42)));
         assert_eq!(db.event_len().unwrap(), 1);
         assert!(db.json_get("doc", "field").unwrap().is_some());
     }

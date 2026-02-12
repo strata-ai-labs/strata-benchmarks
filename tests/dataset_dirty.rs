@@ -117,7 +117,7 @@ fn dirty_state_roundtrips() {
             }
             Ok(Err(_)) => continue,
             Ok(Ok(_)) => {
-                let got = db.state_read(&entry.cell).unwrap_or_else(|e| {
+                let got = db.state_get(&entry.cell).unwrap_or_else(|e| {
                     panic!("[BUG] state_read failed after set for '{}': {}", desc, e);
                 });
                 assert_eq!(
@@ -154,7 +154,7 @@ fn dirty_event_roundtrips() {
             }
             Ok(Err(_)) => continue,
             Ok(Ok(seq)) => {
-                let got = db.event_read(seq).unwrap_or_else(|e| {
+                let got = db.event_get(seq).unwrap_or_else(|e| {
                     panic!("[BUG] event_read failed after append for '{}': {}", desc, e);
                 });
                 let got = got.unwrap_or_else(|| {
@@ -344,7 +344,7 @@ fn dirty_cross_branch_isolation() {
         }
 
         if state_ok {
-            let got = db.state_read(&entry.cell).unwrap();
+            let got = db.state_get(&entry.cell).unwrap();
             assert_eq!(
                 got, None,
                 "[BUG] dirty state leaked from branch '{}' to default for '{}'",
@@ -374,7 +374,7 @@ fn dirty_cross_branch_isolation() {
         }
 
         if state_ok {
-            let got = db.state_read(&entry.cell).unwrap().unwrap();
+            let got = db.state_get(&entry.cell).unwrap().unwrap();
             assert_eq!(
                 got, state_val,
                 "[BUG] dirty state lost on branch for '{}'",
@@ -504,7 +504,7 @@ fn event_many_types_rapid_fire() {
     // Each of the 50 types should have 10 events
     for i in 0..50 {
         let event_type = format!("type_{:04}", i);
-        let events = db.event_read_by_type(&event_type).unwrap();
+        let events = db.event_get_by_type(&event_type).unwrap();
         assert_eq!(events.len(), 10, "type {} should have 10 events", event_type);
     }
 }
@@ -573,7 +573,7 @@ fn rapid_cas_contention_simulation() {
     assert_eq!(successes, 1, "only one CAS should succeed with same stale version");
 
     // The cell should hold the value from the single successful CAS
-    let got = db.state_read("contested").unwrap().unwrap();
+    let got = db.state_get("contested").unwrap().unwrap();
     assert_eq!(got, stratadb::Value::Int(1));
 
     // Now do a valid CAS with the correct version

@@ -71,7 +71,7 @@ fn per_branch_state_isolation() {
     for (branch_name, data) in &ds.per_branch_data {
         db.set_branch(branch_name).unwrap();
         for cell in &data.state {
-            let got = db.state_read(&cell.cell).unwrap();
+            let got = db.state_get(&cell.cell).unwrap();
             assert_eq!(
                 got,
                 Some(cell.value.to_value()),
@@ -204,7 +204,7 @@ fn cross_branch_state_comparison() {
     let mut values: std::collections::HashMap<String, f64> = std::collections::HashMap::new();
     for (branch_name, expected_val) in &cmp.expected {
         db.set_branch(branch_name).unwrap();
-        let got = db.state_read(&cmp.cell).unwrap().unwrap();
+        let got = db.state_get(&cmp.cell).unwrap().unwrap();
         if let stratadb::Value::Float(f) = got {
             values.insert(branch_name.clone(), f);
             assert!(

@@ -804,5 +804,5 @@ pub fn parse_metric(s: &str) -> DistanceMetric {
 }
 
 pub fn fresh_db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }

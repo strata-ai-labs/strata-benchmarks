@@ -77,7 +77,7 @@ fn state_read(c: &mut Criterion) {
         group.bench_function(BenchmarkId::new("durability", mode.label()), |b| {
             b.iter(|| {
                 let i = counter.fetch_add(1, Ordering::Relaxed) % CELL_POOL_SIZE;
-                bench_db.db.state_read(&format!("cell_{}", i)).unwrap();
+                bench_db.db.state_get(&format!("cell_{}", i)).unwrap();
             });
         });
 
@@ -85,7 +85,7 @@ fn state_read(c: &mut Criterion) {
         let label = format!("state/read/{}", mode.label());
         let (p, counters) = measure_with_counters(&bench_db, PERCENTILE_SAMPLES, || {
             let i = pct_counter.fetch_add(1, Ordering::Relaxed) % CELL_POOL_SIZE;
-            bench_db.db.state_read(&format!("cell_{}", i)).unwrap();
+            bench_db.db.state_get(&format!("cell_{}", i)).unwrap();
         });
         report_percentiles(&label, &p);
         report_counters(&label, &counters, PERCENTILE_SAMPLES as u64);

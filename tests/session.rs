@@ -131,6 +131,7 @@ fn read_your_writes_kv() {
     // Write within transaction
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "key".into(),
         value: Value::Int(42),
     }).unwrap();
@@ -138,7 +139,9 @@ fn read_your_writes_kv() {
     // Read within same transaction sees the write
     let output = s.execute(Command::KvGet {
         branch: None,
+        space: None,
         key: "key".into(),
+        as_of: None,
     }).unwrap();
 
     match output {
@@ -155,13 +158,16 @@ fn read_your_writes_state() {
     // StateInit is transactional (StateSet bypasses transactions)
     s.execute(Command::StateInit {
         branch: None,
+        space: None,
         cell: "cell".into(),
         value: Value::String("hello".into()),
     }).unwrap();
 
-    let output = s.execute(Command::StateRead {
+    let output = s.execute(Command::StateGet {
         branch: None,
+        space: None,
         cell: "cell".into(),
+        as_of: None,
     }).unwrap();
 
     match output {
@@ -177,13 +183,14 @@ fn read_your_writes_event() {
 
     s.execute(Command::EventAppend {
         branch: None,
+        space: None,
         event_type: "test".into(),
         payload: Value::Object(
             [("data".to_string(), Value::Int(1))].into_iter().collect(),
         ),
     }).unwrap();
 
-    let output = s.execute(Command::EventLen { branch: None }).unwrap();
+    let output = s.execute(Command::EventLen { branch: None, space: None }).unwrap();
     match output {
         Output::Uint(len) => assert_eq!(len, 1),
         _ => panic!("Expected event count within transaction"),
@@ -202,6 +209,7 @@ fn commit_makes_kv_writes_visible() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "committed".into(),
         value: Value::Int(99),
     }).unwrap();
@@ -221,13 +229,14 @@ fn commit_makes_state_writes_visible() {
     // Use StateInit (transactional) instead of StateSet (bypasses transaction)
     s.execute(Command::StateInit {
         branch: None,
+        space: None,
         cell: "cell".into(),
         value: Value::Int(7),
     }).unwrap();
     s.execute(Command::TxnCommit).unwrap();
 
     let strata = Strata::from_database(db).unwrap();
-    assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(7)));
+    assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(7)));
 }
 
 // =============================================================================
@@ -242,6 +251,7 @@ fn rollback_discards_kv_writes() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "rolled_back".into(),
         value: Value::Int(1),
     }).unwrap();
@@ -261,13 +271,14 @@ fn rollback_discards_state_writes() {
     // Use StateInit (transactional) instead of StateSet (bypasses transaction)
     s.execute(Command::StateInit {
         branch: None,
+        space: None,
         cell: "temp".into(),
         value: Value::Int(999),
     }).unwrap();
     s.execute(Command::TxnRollback).unwrap();
 
     let strata = Strata::from_database(db).unwrap();
-    assert_eq!(strata.state_read("temp").unwrap(), None);
+    assert_eq!(strata.state_get("temp").unwrap(), None);
 }
 
 // =============================================================================
@@ -283,6 +294,7 @@ fn session_drop_rolls_back_uncommitted() {
         s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
         s.execute(Command::KvPut {
             branch: None,
+            space: None,
             key: "orphaned".into(),
             value: Value::Int(42),
         }).unwrap();
@@ -342,16 +354,19 @@ fn multiple_kv_operations_in_transaction() {
     // Multiple puts
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "a".into(),
         value: Value::Int(1),
     }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "b".into(),
         value: Value::Int(2),
     }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "c".into(),
         value: Value::Int(3),
     }).unwrap();
@@ -359,12 +374,14 @@ fn multiple_kv_operations_in_transaction() {
     // Delete one
     s.execute(Command::KvDelete {
         branch: None,
+        space: None,
         key: "b".into(),
     }).unwrap();
 
     // Overwrite one
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "a".into(),
         value: Value::Int(10),
     }).unwrap();
@@ -388,6 +405,7 @@ fn cross_primitive_transaction() {
     // KV
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "key".into(),
         value: Value::String("val".into()),
     }).unwrap();
@@ -395,6 +413,7 @@ fn cross_primitive_transaction() {
     // State (StateInit is transactional; StateSet bypasses transactions)
     s.execute(Command::StateInit {
         branch: None,
+        space: None,
         cell: "cell".into(),
         value: Value::Int(42),
     }).unwrap();
@@ -402,6 +421,7 @@ fn cross_primitive_transaction() {
     // Event
     s.execute(Command::EventAppend {
         branch: None,
+        space: None,
         event_type: "audit".into(),
         payload: Value::Object(
             [("action".to_string(), Value::String("test".into()))].into_iter().collect(),
@@ -413,7 +433,7 @@ fn cross_primitive_transaction() {
     // All should be visible
     let strata = Strata::from_database(db).unwrap();
     assert_eq!(strata.kv_get("key").unwrap(), Some(Value::String("val".into())));
-    assert_eq!(strata.state_read("cell").unwrap(), Some(Value::Int(42)));
+    assert_eq!(strata.state_get("cell").unwrap(), Some(Value::Int(42)));
     assert_eq!(strata.event_len().unwrap(), 1);
 }
 
@@ -430,6 +450,7 @@ fn multiple_sequential_transactions() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "counter".into(),
         value: Value::Int(1),
     }).unwrap();
@@ -439,6 +460,7 @@ fn multiple_sequential_transactions() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "counter".into(),
         value: Value::Int(2),
     }).unwrap();
@@ -448,6 +470,7 @@ fn multiple_sequential_transactions() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "counter".into(),
         value: Value::Int(999),
     }).unwrap();
@@ -470,6 +493,7 @@ fn commands_without_transaction_auto_commit() {
     // Execute without begin — should auto-commit
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "auto".into(),
         value: Value::Int(1),
     }).unwrap();
@@ -485,6 +509,7 @@ fn commit_returns_version() {
     s.execute(Command::TxnBegin { branch: None, options: None }).unwrap();
     s.execute(Command::KvPut {
         branch: None,
+        space: None,
         key: "versioned".into(),
         value: Value::Int(1),
     }).unwrap();

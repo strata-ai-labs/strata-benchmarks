@@ -4,7 +4,7 @@ use stratadb::{Strata, Value};
 use std::collections::HashMap;
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 fn obj(pairs: &[(&str, Value)]) -> Value {

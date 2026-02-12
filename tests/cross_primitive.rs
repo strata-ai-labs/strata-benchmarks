@@ -4,7 +4,7 @@ use stratadb::{Strata, Value, DistanceMetric};
 use std::collections::HashMap;
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 fn obj(pairs: &[(&str, Value)]) -> Value {
@@ -45,7 +45,7 @@ fn agent_workflow_kv_events_state() {
     db.state_set("agent:status", "done").unwrap();
 
     // Verify state
-    assert_eq!(db.state_read("agent:status").unwrap(), Some(Value::String("done".into())));
+    assert_eq!(db.state_get("agent:status").unwrap(), Some(Value::String("done".into())));
     assert_eq!(db.event_len().unwrap(), 2);
     assert_eq!(db.kv_get("result:search").unwrap(), Some(Value::String("found 5 relevant docs".into())));
 }
@@ -176,7 +176,7 @@ fn audit_trail_across_operations() {
     ])).unwrap();
 
     // Audit trail has all operations
-    let audit = db.event_read_by_type("audit").unwrap();
+    let audit = db.event_get_by_type("audit").unwrap();
     assert_eq!(audit.len(), 3);
 
     // Data is gone but audit trail remains
@@ -205,7 +205,7 @@ fn all_primitives_isolated_on_branch_switch() {
 
     // Nothing visible
     assert_eq!(db.kv_get("kv").unwrap(), None);
-    assert_eq!(db.state_read("state").unwrap(), None);
+    assert_eq!(db.state_get("state").unwrap(), None);
     assert_eq!(db.event_len().unwrap(), 0);
     assert_eq!(db.json_get("doc", "$").unwrap(), None);
     assert!(db.vector_list_collections().unwrap().is_empty());
@@ -213,7 +213,7 @@ fn all_primitives_isolated_on_branch_switch() {
     // Switch back — everything still there
     db.set_branch("default").unwrap();
     assert!(db.kv_get("kv").unwrap().is_some());
-    assert!(db.state_read("state").unwrap().is_some());
+    assert!(db.state_get("state").unwrap().is_some());
     assert_eq!(db.event_len().unwrap(), 1);
     assert!(db.json_get("doc", "$").unwrap().is_some());
     assert_eq!(db.vector_list_collections().unwrap().len(), 1);

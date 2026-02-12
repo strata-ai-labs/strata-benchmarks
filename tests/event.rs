@@ -4,7 +4,7 @@ use stratadb::{Strata, Value};
 use std::collections::HashMap;
 
 fn db() -> Strata {
-    Strata::open_temp().expect("failed to open temp db")
+    Strata::cache().expect("failed to open temp db")
 }
 
 fn obj(pairs: &[(&str, Value)]) -> Value {
@@ -24,7 +24,7 @@ fn append_and_read_by_sequence() {
     let db = db();
     let seq = db.event_append("tool_call", obj(&[("tool", Value::String("search".into()))])).unwrap();
 
-    let event = db.event_read(seq).unwrap();
+    let event = db.event_get(seq).unwrap();
     assert!(event.is_some());
 }
 
@@ -41,7 +41,7 @@ fn append_returns_incrementing_sequences() {
 #[test]
 fn read_nonexistent_sequence_returns_none() {
     let db = db();
-    assert!(db.event_read(99999).unwrap().is_none());
+    assert!(db.event_get(99999).unwrap().is_none());
 }
 
 // =============================================================================
@@ -55,10 +55,10 @@ fn read_by_type_filters_correctly() {
     db.event_append("observation", obj(&[("result", Value::String("found".into()))])).unwrap();
     db.event_append("tool_call", obj(&[("tool", Value::String("write".into()))])).unwrap();
 
-    let tool_calls = db.event_read_by_type("tool_call").unwrap();
+    let tool_calls = db.event_get_by_type("tool_call").unwrap();
     assert_eq!(tool_calls.len(), 2);
 
-    let observations = db.event_read_by_type("observation").unwrap();
+    let observations = db.event_get_by_type("observation").unwrap();
     assert_eq!(observations.len(), 1);
 }
 
@@ -66,7 +66,7 @@ fn read_by_type_filters_correctly() {
 fn read_by_type_nonexistent_returns_empty() {
     let db = db();
     db.event_append("a", obj(&[("x", Value::Int(1))])).unwrap();
-    let events = db.event_read_by_type("nonexistent").unwrap();
+    let events = db.event_get_by_type("nonexistent").unwrap();
     assert!(events.is_empty());
 }
 
@@ -101,7 +101,7 @@ fn events_are_immutable() {
     // Append another event with same type — the original should be unchanged
     db.event_append("type", obj(&[("data", Value::String("second".into()))])).unwrap();
 
-    let original = db.event_read(seq).unwrap().unwrap();
+    let original = db.event_get(seq).unwrap().unwrap();
     // The original event should still have its original payload
     assert!(format!("{:?}", original.value).contains("original"));
 }
@@ -118,6 +118,6 @@ fn many_events() {
     }
     assert_eq!(db.event_len().unwrap(), 500);
 
-    let all = db.event_read_by_type("stream").unwrap();
+    let all = db.event_get_by_type("stream").unwrap();
     assert_eq!(all.len(), 500);
 }
