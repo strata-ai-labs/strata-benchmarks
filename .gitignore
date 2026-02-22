@@ -24,6 +24,9 @@ target
 # Benchmark result JSON files (keep .gitkeep)
 results/*.json
 
+# Downloaded LDBC datasets (large, fetch with scripts/download-ldbc.sh)
+data/graph/graph500-*
+
 # Added by cargo
 
 /target

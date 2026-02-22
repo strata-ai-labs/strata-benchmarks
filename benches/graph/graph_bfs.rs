@@ -1,7 +1,8 @@
-//! LDBC Graphalytics BFS Benchmark for StrataDB
+//! LDBC Graphalytics BFS Benchmark — Strata vs petgraph head-to-head
 //!
-//! Validates BFS traversal correctness against LDBC reference output and measures
-//! throughput via EVPS (Edges + Vertices processed per second).
+//! Validates BFS traversal correctness and measures throughput via EVPS
+//! (Edges + Vertices processed per second). Compares Strata against petgraph
+//! (pure in-memory adjacency list) on the same dataset, same machine.
 //!
 //! Uses a custom harness (matching fill-level and redis-compare patterns) since BFS
 //! is a whole-graph operation, not per-operation latency.
@@ -11,6 +12,7 @@
 //! Validate only: `cargo bench --bench graph_bfs -- --validate-only`
 //! CSV:           `cargo bench --bench graph_bfs -- --csv`
 //! Custom data:   `cargo bench --bench graph_bfs -- --dataset path/to/ldbc/dir`
+//! Strata only:   `cargo bench --bench graph_bfs -- --strata-only`
 
 #[allow(unused)]
 #[path = "../harness/mod.rs"]
@@ -21,7 +23,7 @@ mod ldbc;
 
 use harness::recorder::ResultRecorder;
 use harness::{create_db, print_hardware_info, BenchDb, DurabilityConfig};
-use ldbc::{BfsReference, LdbcDataset, UNREACHABLE};
+use ldbc::{petgraph_bfs, BfsReference, LdbcDataset, UNREACHABLE};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -49,6 +51,7 @@ struct Config {
     no_validate: bool,
     csv: bool,
     quiet: bool,
+    strata_only: bool,
 }
 
 fn parse_args() -> Config {
@@ -61,6 +64,7 @@ fn parse_args() -> Config {
         no_validate: false,
         csv: false,
         quiet: false,
+        strata_only: false,
     };
 
     let mut i = 1;
@@ -81,13 +85,14 @@ fn parse_args() -> Config {
             "--runs" => {
                 i += 1;
                 if i < args.len() {
-                    config.runs = args[i].parse().unwrap_or(DEFAULT_RUNS);
+                    config.runs = args[i].parse::<usize>().unwrap_or(DEFAULT_RUNS).max(1);
                 }
             }
             "--validate-only" => config.validate_only = true,
             "--no-validate" => config.no_validate = true,
             "--csv" => config.csv = true,
             "-q" => config.quiet = true,
+            "--strata-only" => config.strata_only = true,
             _ => {}
         }
         i += 1;
@@ -97,7 +102,7 @@ fn parse_args() -> Config {
 }
 
 // ---------------------------------------------------------------------------
-// Graph loading
+// Graph loading (Strata)
 // ---------------------------------------------------------------------------
 
 fn load_graph(db: &BenchDb, dataset: &LdbcDataset) -> std::time::Duration {
@@ -128,7 +133,7 @@ fn load_graph(db: &BenchDb, dataset: &LdbcDataset) -> std::time::Duration {
 }
 
 // ---------------------------------------------------------------------------
-// BFS execution
+// BFS execution (Strata)
 // ---------------------------------------------------------------------------
 
 struct BfsRun {
@@ -158,7 +163,7 @@ fn run_bfs(db: &BenchDb, source: u64) -> BfsRun {
 }
 
 // ---------------------------------------------------------------------------
-// Validation
+// Validation against LDBC reference
 // ---------------------------------------------------------------------------
 
 struct ValidationResult {
@@ -180,7 +185,6 @@ fn validate_bfs(
         let actual_depth = bfs_depths.get(&vid.to_string()).copied();
 
         if ref_depth == UNREACHABLE {
-            // Vertex should be unreachable
             if let Some(actual) = actual_depth {
                 mismatches += 1;
                 if details.len() < 10 {
@@ -191,7 +195,6 @@ fn validate_bfs(
                 }
             }
         } else {
-            // Vertex should be at specific depth
             match actual_depth {
                 None => {
                     mismatches += 1;
@@ -211,7 +214,7 @@ fn validate_bfs(
                         ));
                     }
                 }
-                _ => {} // match
+                _ => {}
             }
         }
     }
@@ -220,6 +223,77 @@ fn validate_bfs(
         pass: mismatches == 0,
         mismatches,
         details,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Cross-validation: Strata vs petgraph
+// ---------------------------------------------------------------------------
+
+/// Compare Strata BFS depths against petgraph BFS depths.
+/// Returns (pass, num_vertices_checked, mismatches).
+fn cross_validate(
+    dataset: &LdbcDataset,
+    strata_depths: &HashMap<String, usize>,
+    petgraph_depths: &HashMap<petgraph::graph::NodeIndex, usize>,
+    id_map: &HashMap<u64, petgraph::graph::NodeIndex>,
+) -> (bool, usize, usize) {
+    let mut mismatches = 0;
+    let mut checked = 0;
+
+    for &vid in &dataset.vertices {
+        checked += 1;
+        let strata_d = strata_depths.get(&vid.to_string()).copied();
+        let pg_d = id_map
+            .get(&vid)
+            .and_then(|idx| petgraph_depths.get(idx).copied());
+
+        match (strata_d, pg_d) {
+            (Some(a), Some(b)) if a != b => mismatches += 1,
+            (None, Some(_)) | (Some(_), None) => mismatches += 1,
+            _ => {} // both None (unreachable) or both equal
+        }
+    }
+
+    (mismatches == 0, checked, mismatches)
+}
+
+// ---------------------------------------------------------------------------
+// Run statistics
+// ---------------------------------------------------------------------------
+
+struct RunStats {
+    avg: std::time::Duration,
+    p50: std::time::Duration,
+    p95: std::time::Duration,
+    p99: std::time::Duration,
+    min: std::time::Duration,
+    max: std::time::Duration,
+    avg_evps: f64,
+    count: usize,
+}
+
+fn compute_stats(times: &mut Vec<std::time::Duration>, total_elements: f64) -> RunStats {
+    assert!(!times.is_empty(), "compute_stats requires at least one run");
+    times.sort_unstable();
+    let len = times.len();
+    let sum: std::time::Duration = times.iter().sum();
+    let avg = sum / len as u32;
+    let avg_secs = avg.as_secs_f64();
+    let avg_evps = if avg_secs > 0.0 {
+        total_elements / avg_secs
+    } else {
+        0.0
+    };
+    RunStats {
+        avg,
+        p50: times[len * 50 / 100],
+        p95: times[(len * 95 / 100).min(len - 1)],
+        p99: times[(len * 99 / 100).min(len - 1)],
+        min: times[0],
+        max: times[len - 1],
+        avg_evps,
+        count: len,
     }
 }
 
@@ -239,12 +313,41 @@ fn fmt_num(n: u64) -> String {
     result.chars().rev().collect()
 }
 
-fn print_csv_header() {
-    println!("\"run\",\"bfs_time_ms\",\"evps\",\"vertices\",\"edges\"");
+fn fmt_ms(d: std::time::Duration) -> String {
+    format!("{:.1}ms", d.as_secs_f64() * 1000.0)
 }
 
-fn print_csv_row(run: usize, bfs_ms: f64, evps: f64, vertices: usize, edges: usize) {
-    println!("{},{:.3},{:.0},{},{}", run, bfs_ms, evps, vertices, edges);
+fn print_csv_header() {
+    println!("\"engine\",\"run\",\"bfs_time_ms\",\"evps\",\"vertices\",\"edges\"");
+}
+
+fn print_csv_row(engine: &str, run: usize, bfs_ms: f64, evps: f64, vertices: usize, edges: usize) {
+    println!("\"{}\",{},{:.3},{:.0},{},{}", engine, run, bfs_ms, evps, vertices, edges);
+}
+
+fn print_published_references(strata_evps: f64, dataset_name: &str) {
+    eprintln!();
+    eprintln!("--- Published Reference Points (different hardware, for context) ---");
+    eprintln!("  {:30} {:>14}  {}", "System", "~EVPS", "Notes");
+    eprintln!("  {:30} {:>14}  {}", "------", "-----", "-----");
+    eprintln!(
+        "  {:30} {:>14}  {}",
+        "GraphBLAS/SuiteSparse", "~7,000,000,000", "128-core server, 4.3B edges"
+    );
+    eprintln!(
+        "  {:30} {:>14}  {}",
+        "Oracle PGX.D", "~500,000,000", "graph500-22, 16-core server"
+    );
+    eprintln!(
+        "  {:30} {:>14}  {}",
+        "Neo4j", "~2,000,000", "estimated, single machine"
+    );
+    eprintln!(
+        "  {:30} {:>14}  {}",
+        "Strata (this run)",
+        fmt_num(strata_evps as u64),
+        format!("{}, this machine", dataset_name),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -266,9 +369,12 @@ fn main() {
         .or(dataset.bfs_source)
         .unwrap_or(dataset.vertices[0]);
 
+    let total_elements = (dataset.vertices.len() + dataset.edges.len()) as f64;
+
     if !config.csv {
         eprintln!("=== LDBC Graphalytics BFS Benchmark ===");
-        eprintln!("Dataset:  {} ({} vertices, {} edges, {})",
+        eprintln!(
+            "Dataset:  {} ({} vertices, {} edges, {})",
             dataset.name,
             fmt_num(dataset.vertices.len() as u64),
             fmt_num(dataset.edges.len() as u64),
@@ -277,18 +383,60 @@ fn main() {
         eprintln!("Source:   {}", source);
         eprintln!("Runs:     {}", config.runs);
         eprintln!("Direction: both (LDBC BFS treats edges as undirected)");
+        if config.strata_only {
+            eprintln!("Mode:     strata-only (petgraph comparison skipped)");
+        }
         eprintln!();
     }
 
-    // Load graph into Strata
+    // -----------------------------------------------------------------------
+    // Load phase
+    // -----------------------------------------------------------------------
+
+    // Strata
     let db = create_db(DurabilityConfig::Cache);
 
     if !config.csv && !config.quiet {
         eprint!("Loading graph into Strata...");
     }
-    let load_time = load_graph(&db, &dataset);
+    let strata_load_time = load_graph(&db, &dataset);
     if !config.csv && !config.quiet {
-        eprintln!(" done ({:.3}ms)", load_time.as_secs_f64() * 1000.0);
+        eprintln!(" done ({:.1}ms)", strata_load_time.as_secs_f64() * 1000.0);
+    }
+
+    // petgraph (unless --strata-only)
+    let petgraph_state = if !config.strata_only {
+        if !config.csv && !config.quiet {
+            eprint!("Loading graph into petgraph...");
+        }
+        let pg_start = Instant::now();
+        let (pg_graph, id_map) = dataset.to_petgraph();
+        let pg_load_time = pg_start.elapsed();
+        if !config.csv && !config.quiet {
+            eprintln!(" done ({:.1}ms)", pg_load_time.as_secs_f64() * 1000.0);
+        }
+        Some((pg_graph, id_map, pg_load_time))
+    } else {
+        None
+    };
+
+    // Print load comparison
+    if !config.csv && !config.quiet {
+        eprintln!();
+        eprintln!("--- Load Phase ---");
+        eprintln!("  {:12} {}", "Strata:", fmt_ms(strata_load_time));
+        if let Some((_, _, pg_load_time)) = &petgraph_state {
+            let pg_secs = pg_load_time.as_secs_f64();
+            if pg_secs > 0.0 {
+                let ratio = strata_load_time.as_secs_f64() / pg_secs;
+                eprintln!(
+                    "  {:12} {}  ({:.2}x faster)",
+                    "petgraph:", fmt_ms(*pg_load_time), ratio
+                );
+            } else {
+                eprintln!("  {:12} {}", "petgraph:", fmt_ms(*pg_load_time));
+            }
+        }
     }
 
     // Load BFS reference for validation
@@ -301,7 +449,7 @@ fn main() {
             }))
         } else {
             if !config.csv && !config.quiet {
-                eprintln!("No BFS reference file found, skipping validation.");
+                eprintln!("No BFS reference file found, skipping LDBC validation.");
             }
             None
         }
@@ -309,9 +457,11 @@ fn main() {
         None
     };
 
-    // Run BFS
-    let mut run_times = Vec::with_capacity(config.runs);
-    let total_elements = (dataset.vertices.len() + dataset.edges.len()) as f64;
+    // -----------------------------------------------------------------------
+    // BFS phase — Strata
+    // -----------------------------------------------------------------------
+
+    let mut strata_times = Vec::with_capacity(config.runs);
 
     if config.csv {
         print_csv_header();
@@ -321,18 +471,21 @@ fn main() {
         let bfs_run = run_bfs(&db, source);
         let bfs_ms = bfs_run.elapsed.as_secs_f64() * 1000.0;
         let evps = total_elements / bfs_run.elapsed.as_secs_f64();
-        run_times.push(bfs_run.elapsed);
+        strata_times.push(bfs_run.elapsed);
 
-        // Validate first run (or all runs in validate-only mode)
+        // Validate first run against LDBC reference
         if let Some(ref reference) = reference {
             if run == 0 || config.validate_only {
                 let validation = validate_bfs(&dataset, &bfs_run.depths, reference);
                 if !config.csv {
                     if validation.pass {
-                        eprintln!("Validation: PASS ({} vertices checked)", dataset.vertices.len());
+                        eprintln!(
+                            "LDBC Validation: PASS ({} vertices checked)",
+                            dataset.vertices.len()
+                        );
                     } else {
                         eprintln!(
-                            "Validation: FAIL ({} mismatches out of {} vertices)",
+                            "LDBC Validation: FAIL ({} mismatches out of {} vertices)",
                             validation.mismatches,
                             dataset.vertices.len()
                         );
@@ -347,6 +500,29 @@ fn main() {
             }
         }
 
+        // Cross-validate first run against petgraph
+        if run == 0 {
+            if let Some((ref pg_graph, ref id_map, _)) = petgraph_state {
+                let pg_source = id_map[&source];
+                let pg_depths = petgraph_bfs(pg_graph, pg_source);
+                let (pass, checked, mismatches) =
+                    cross_validate(&dataset, &bfs_run.depths, &pg_depths, id_map);
+                if !config.csv {
+                    if pass {
+                        eprintln!(
+                            "Cross-validation: PASS (depths match on all {} vertices)",
+                            fmt_num(checked as u64)
+                        );
+                    } else {
+                        eprintln!(
+                            "Cross-validation: FAIL ({} mismatches out of {} vertices)",
+                            mismatches, checked
+                        );
+                    }
+                }
+            }
+        }
+
         if config.validate_only {
             if !config.csv {
                 eprintln!("Validate-only mode, skipping remaining runs.");
@@ -355,87 +531,205 @@ fn main() {
         }
 
         if config.csv {
-            print_csv_row(run + 1, bfs_ms, evps, dataset.vertices.len(), dataset.edges.len());
-        } else if config.quiet {
-            if run == 0 {
+            print_csv_row(
+                "strata",
+                run + 1,
+                bfs_ms,
+                evps,
+                dataset.vertices.len(),
+                dataset.edges.len(),
+            );
+        } else if config.quiet && run == 0 {
+            eprintln!(
+                "Strata BFS: {:.3}ms, EVPS: {:.0}, |V|={}, |E|={}",
+                bfs_ms, evps, dataset.vertices.len(), dataset.edges.len()
+            );
+        }
+    }
+
+    let strata_stats = compute_stats(&mut strata_times, total_elements);
+
+    // -----------------------------------------------------------------------
+    // BFS phase — petgraph
+    // -----------------------------------------------------------------------
+
+    let petgraph_stats = if let Some((ref pg_graph, ref id_map, _)) = petgraph_state {
+        let pg_source = id_map[&source];
+        let mut pg_times = Vec::with_capacity(config.runs);
+
+        for run in 0..config.runs {
+            let start = Instant::now();
+            let _ = petgraph_bfs(pg_graph, pg_source);
+            let elapsed = start.elapsed();
+            pg_times.push(elapsed);
+
+            if config.csv {
+                let bfs_ms = elapsed.as_secs_f64() * 1000.0;
+                let evps = total_elements / elapsed.as_secs_f64();
+                print_csv_row(
+                    "petgraph",
+                    run + 1,
+                    bfs_ms,
+                    evps,
+                    dataset.vertices.len(),
+                    dataset.edges.len(),
+                );
+            } else if config.quiet && run == 0 {
+                let bfs_ms = elapsed.as_secs_f64() * 1000.0;
+                let evps = total_elements / elapsed.as_secs_f64();
                 eprintln!(
-                    "BFS: {:.3}ms, EVPS: {:.0}, |V|={}, |E|={}",
+                    "petgraph BFS: {:.3}ms, EVPS: {:.0}, |V|={}, |E|={}",
                     bfs_ms, evps, dataset.vertices.len(), dataset.edges.len()
                 );
             }
         }
-    }
 
-    // Compute percentiles from run times
-    run_times.sort_unstable();
-    let len = run_times.len();
-    let p50 = run_times[len * 50 / 100];
-    let p95 = run_times[(len * 95 / 100).min(len - 1)];
-    let p99 = run_times[(len * 99 / 100).min(len - 1)];
-    let min = run_times[0];
-    let max = run_times[len - 1];
-    let sum: std::time::Duration = run_times.iter().sum();
-    let avg = sum / len as u32;
+        Some(compute_stats(&mut pg_times, total_elements))
+    } else {
+        None
+    };
 
-    let avg_evps = total_elements / avg.as_secs_f64();
+    // -----------------------------------------------------------------------
+    // Output comparison table
+    // -----------------------------------------------------------------------
 
     if !config.csv && !config.quiet {
         eprintln!();
-        eprintln!("--- BFS Results ({} runs) ---", len);
+        eprintln!(
+            "--- BFS Phase ({} runs, direction=both) ---",
+            strata_stats.count
+        );
+        eprintln!(
+            "  {:16} {:>10} {:>10} {:>14}",
+            "", "avg", "p50", "EVPS"
+        );
+        eprintln!(
+            "  {:16} {:>10} {:>10} {:>14}",
+            "Strata:",
+            fmt_ms(strata_stats.avg),
+            fmt_ms(strata_stats.p50),
+            fmt_num(strata_stats.avg_evps as u64),
+        );
+
+        if let Some(ref pg) = petgraph_stats {
+            eprintln!(
+                "  {:16} {:>10} {:>10} {:>14}",
+                "petgraph:",
+                fmt_ms(pg.avg),
+                fmt_ms(pg.p50),
+                fmt_num(pg.avg_evps as u64),
+            );
+            let avg_ratio = strata_stats.avg.as_secs_f64() / pg.avg.as_secs_f64();
+            let p50_ratio = strata_stats.p50.as_secs_f64() / pg.p50.as_secs_f64();
+            eprintln!(
+                "  {:16} {:>10} {:>10}",
+                "Ratio:",
+                format!("{:.1}x", avg_ratio),
+                format!("{:.1}x", p50_ratio),
+            );
+        }
+
+        // Full Strata percentile table
+        eprintln!();
+        eprintln!("--- Strata Detailed ({} runs) ---", strata_stats.count);
         eprintln!(
             "  {:>10}  {:>10}  {:>10}  {:>10}  {:>10}  {:>10}",
             "avg", "p50", "p95", "p99", "min", "max"
         );
         eprintln!(
-            "  {:>9.3}ms  {:>9.3}ms  {:>9.3}ms  {:>9.3}ms  {:>9.3}ms  {:>9.3}ms",
-            avg.as_secs_f64() * 1000.0,
-            p50.as_secs_f64() * 1000.0,
-            p95.as_secs_f64() * 1000.0,
-            p99.as_secs_f64() * 1000.0,
-            min.as_secs_f64() * 1000.0,
-            max.as_secs_f64() * 1000.0,
+            "  {:>10}  {:>10}  {:>10}  {:>10}  {:>10}  {:>10}",
+            fmt_ms(strata_stats.avg),
+            fmt_ms(strata_stats.p50),
+            fmt_ms(strata_stats.p95),
+            fmt_ms(strata_stats.p99),
+            fmt_ms(strata_stats.min),
+            fmt_ms(strata_stats.max),
         );
-        eprintln!();
         eprintln!(
-            "EVPS (avg):   {:.0}  (|V|+|E|={} / {:.6}s)",
-            avg_evps,
+            "  EVPS (avg): {}  (|V|+|E|={} / {:.6}s)",
+            fmt_num(strata_stats.avg_evps as u64),
             total_elements as u64,
-            avg.as_secs_f64(),
+            strata_stats.avg.as_secs_f64(),
         );
-        eprintln!(
-            "Load time:    {:.3}ms",
-            load_time.as_secs_f64() * 1000.0,
-        );
-        eprintln!();
+
+        // Published reference points
+        print_published_references(strata_stats.avg_evps, &dataset.name);
     }
 
+    // -----------------------------------------------------------------------
     // Record results
-    let mut recorder = ResultRecorder::new("graph-bfs");
-    let mut params = HashMap::new();
-    params.insert("dataset".into(), serde_json::json!(dataset.name));
-    params.insert("source".into(), serde_json::json!(source));
-    params.insert("vertices".into(), serde_json::json!(dataset.vertices.len()));
-    params.insert("edges".into(), serde_json::json!(dataset.edges.len()));
-    params.insert("direction".into(), serde_json::json!("both"));
+    // -----------------------------------------------------------------------
 
-    recorder.record(BenchmarkResult {
-        benchmark: format!("graph-bfs/{}/{}V-{}E", dataset.name, dataset.vertices.len(), dataset.edges.len()),
-        category: "graph-bfs".to_string(),
-        parameters: params,
-        metrics: BenchmarkMetrics {
-            ops_per_sec: Some(avg_evps),
-            p50_ns: Some(p50.as_nanos() as u64),
-            p95_ns: Some(p95.as_nanos() as u64),
-            p99_ns: Some(p99.as_nanos() as u64),
-            min_ns: Some(min.as_nanos() as u64),
-            max_ns: Some(max.as_nanos() as u64),
-            avg_ns: Some(avg.as_nanos() as u64),
-            samples: Some(len as u64),
-            ..Default::default()
-        },
-    });
+    let mut recorder = ResultRecorder::new("graph-bfs");
+
+    // Strata result
+    {
+        let mut params = HashMap::new();
+        params.insert("dataset".into(), serde_json::json!(dataset.name));
+        params.insert("engine".into(), serde_json::json!("strata"));
+        params.insert("source".into(), serde_json::json!(source));
+        params.insert("vertices".into(), serde_json::json!(dataset.vertices.len()));
+        params.insert("edges".into(), serde_json::json!(dataset.edges.len()));
+        params.insert("direction".into(), serde_json::json!("both"));
+
+        recorder.record(BenchmarkResult {
+            benchmark: format!(
+                "graph-bfs/strata/{}/{}V-{}E",
+                dataset.name,
+                dataset.vertices.len(),
+                dataset.edges.len()
+            ),
+            category: "graph-bfs".to_string(),
+            parameters: params,
+            metrics: BenchmarkMetrics {
+                ops_per_sec: Some(strata_stats.avg_evps),
+                p50_ns: Some(strata_stats.p50.as_nanos() as u64),
+                p95_ns: Some(strata_stats.p95.as_nanos() as u64),
+                p99_ns: Some(strata_stats.p99.as_nanos() as u64),
+                min_ns: Some(strata_stats.min.as_nanos() as u64),
+                max_ns: Some(strata_stats.max.as_nanos() as u64),
+                avg_ns: Some(strata_stats.avg.as_nanos() as u64),
+                samples: Some(strata_stats.count as u64),
+                ..Default::default()
+            },
+        });
+    }
+
+    // petgraph result
+    if let Some(ref pg) = petgraph_stats {
+        let mut params = HashMap::new();
+        params.insert("dataset".into(), serde_json::json!(dataset.name));
+        params.insert("engine".into(), serde_json::json!("petgraph"));
+        params.insert("source".into(), serde_json::json!(source));
+        params.insert("vertices".into(), serde_json::json!(dataset.vertices.len()));
+        params.insert("edges".into(), serde_json::json!(dataset.edges.len()));
+        params.insert("direction".into(), serde_json::json!("both"));
+
+        recorder.record(BenchmarkResult {
+            benchmark: format!(
+                "graph-bfs/petgraph/{}/{}V-{}E",
+                dataset.name,
+                dataset.vertices.len(),
+                dataset.edges.len()
+            ),
+            category: "graph-bfs".to_string(),
+            parameters: params,
+            metrics: BenchmarkMetrics {
+                ops_per_sec: Some(pg.avg_evps),
+                p50_ns: Some(pg.p50.as_nanos() as u64),
+                p95_ns: Some(pg.p95.as_nanos() as u64),
+                p99_ns: Some(pg.p99.as_nanos() as u64),
+                min_ns: Some(pg.min.as_nanos() as u64),
+                max_ns: Some(pg.max.as_nanos() as u64),
+                avg_ns: Some(pg.avg.as_nanos() as u64),
+                samples: Some(pg.count as u64),
+                ..Default::default()
+            },
+        });
+    }
 
     if !config.csv {
+        eprintln!();
         eprintln!("=== Benchmark complete ===");
     }
     let _ = recorder.save();
