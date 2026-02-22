@@ -60,6 +60,11 @@ name = "fill_level"
 path = "benches/fill-level/fill_level.rs"
 harness = false
 
+[[bench]]
+name = "graph_bfs"
+path = "benches/graph/graph_bfs.rs"
+harness = false
+
 [[bin]]
 name = "bench-compare"
 path = "src/bin/compare.rs"
