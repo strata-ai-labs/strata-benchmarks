@@ -66,6 +66,11 @@ name = "graph_bfs"
 path = "benches/graph/graph_bfs.rs"
 harness = false
 
+[[bench]]
+name = "ycsb"
+path = "benches/ycsb/ycsb.rs"
+harness = false
+
 [[bin]]
 name = "bench-compare"
 path = "src/bin/compare.rs"
