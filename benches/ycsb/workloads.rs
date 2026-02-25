@@ -236,7 +236,6 @@ pub struct ZipfianGenerator {
     num_items: usize,
     theta: f64,
     zeta_n: f64,
-    zeta_2: f64,
     alpha: f64,
     eta: f64,
 }
@@ -246,6 +245,10 @@ impl ZipfianGenerator {
         let theta = 0.99;
         let zeta_2 = zeta(2, theta);
         let zeta_n = zeta(num_items, theta);
+        Self::from_precomputed(num_items, theta, zeta_n, zeta_2)
+    }
+
+    fn from_precomputed(num_items: usize, theta: f64, zeta_n: f64, zeta_2: f64) -> Self {
         let alpha = 1.0 / (1.0 - theta);
         let eta = (1.0 - (2.0 / num_items as f64).powf(1.0 - theta)) / (1.0 - zeta_2 / zeta_n);
 
@@ -253,10 +256,24 @@ impl ZipfianGenerator {
             num_items,
             theta,
             zeta_n,
-            zeta_2,
             alpha,
             eta,
         }
+    }
+
+    /// Incrementally extend the generator to cover more items without
+    /// recomputing zeta from scratch. O(new_count - old_count) instead of O(new_count).
+    pub fn resize(&mut self, new_count: usize) {
+        if new_count <= self.num_items {
+            return;
+        }
+        let zeta_2 = zeta(2, self.theta);
+        // Incrementally add terms for the new items
+        let mut zeta_n = self.zeta_n;
+        for i in self.num_items..new_count {
+            zeta_n += 1.0 / ((i + 1) as f64).powf(self.theta);
+        }
+        *self = Self::from_precomputed(new_count, self.theta, zeta_n, zeta_2);
     }
 
     /// Return a Zipfian-distributed index in [0, num_items), scrambled via FNV hash.
@@ -312,7 +329,7 @@ impl LatestGenerator {
     pub fn set_max_key(&mut self, max: usize) {
         if max != self.max_key {
             self.max_key = max;
-            self.zipfian = ZipfianGenerator::new(max.max(1));
+            self.zipfian.resize(max.max(1));
         }
     }
 
