@@ -363,6 +363,7 @@ fn record_workload_result(
     params.insert("value_size".into(), serde_json::json!(config.value_size));
     params.insert("durability".into(), serde_json::json!(config.durability.label()));
     params.insert("distribution".into(), serde_json::json!(workload.distribution.label()));
+    params.insert("auto_embed".into(), serde_json::json!(!config.no_embed));
     params.insert(
         "load_ops_per_sec".into(),
         serde_json::json!(load.ops_per_sec),
@@ -445,6 +446,7 @@ struct Config {
     ops: usize,
     durability: DurabilityConfig,
     value_size: usize,
+    no_embed: bool,
     csv: bool,
     quiet: bool,
 }
@@ -457,6 +459,7 @@ fn parse_args() -> Config {
         ops: DEFAULT_OPS,
         durability: DurabilityConfig::Standard,
         value_size: DEFAULT_VALUE_SIZE,
+        no_embed: false,
         csv: false,
         quiet: false,
     };
@@ -503,6 +506,7 @@ fn parse_args() -> Config {
                     config.value_size = args[i].parse().unwrap_or(DEFAULT_VALUE_SIZE);
                 }
             }
+            "--no-embed" | "--raw" => config.no_embed = true,
             "--csv" => config.csv = true,
             "-q" => config.quiet = true,
             _ => {}
@@ -524,11 +528,12 @@ fn main() {
     if !config.csv && !config.quiet {
         eprintln!("=== StrataDB YCSB Benchmark ===");
         eprintln!(
-            "Parameters: {} records, {} ops, {}B values, {} durability",
+            "Parameters: {} records, {} ops, {}B values, {} durability{}",
             fmt_num(config.records as u64),
             fmt_num(config.ops as u64),
             config.value_size,
             config.durability.label(),
+            if config.no_embed { ", auto_embed=off" } else { "" },
         );
     }
 
@@ -549,6 +554,11 @@ fn main() {
 
         // Create a fresh database for each workload
         let db = create_db(config.durability);
+
+        // Disable search features for pure KV benchmarking
+        if config.no_embed {
+            db.db.config_set("auto_embed", "false").unwrap();
+        }
 
         // --- Load phase ---
         if !config.csv && !config.quiet {
