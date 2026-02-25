@@ -351,6 +351,241 @@ fn print_published_references(strata_evps: f64, dataset_name: &str) {
 }
 
 // ---------------------------------------------------------------------------
+// Markdown report generation
+// ---------------------------------------------------------------------------
+
+fn write_markdown_report(
+    json_path: &std::path::Path,
+    dataset: &LdbcDataset,
+    source: u64,
+    runs: usize,
+    strata_only: bool,
+    strata_load_time: std::time::Duration,
+    petgraph_load_time: Option<std::time::Duration>,
+    strata_stats: &RunStats,
+    petgraph_stats: Option<&RunStats>,
+    ldbc_validation: Option<bool>,
+    cross_validation: Option<bool>,
+) -> std::io::Result<PathBuf> {
+    let json_name = json_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let md_name = json_name
+        .replace("graph-bfs-", "graph-bfs-report-")
+        .replace(".json", ".md");
+    let md_path = json_path.with_file_name(md_name);
+
+    let cpu = harness::read_cpu_model();
+    let cores = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(0);
+    let ram_gb = harness::read_total_ram_gb();
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    let mut md = String::new();
+
+    // Title
+    md.push_str("# BFS Benchmark Baseline Report\n\n");
+
+    // Hardware
+    md.push_str("## Hardware\n\n");
+    md.push_str("| Field | Value |\n");
+    md.push_str("|-------|-------|\n");
+    md.push_str(&format!("| CPU | {} |\n", cpu));
+    md.push_str(&format!("| Cores | {} |\n", cores));
+    md.push_str(&format!("| RAM | {} GB |\n", ram_gb));
+    md.push_str(&format!("| OS | {} ({}) |\n", os, arch));
+    md.push_str("\n");
+
+    // Dataset
+    md.push_str("## Dataset\n\n");
+    md.push_str("| Field | Value |\n");
+    md.push_str("|-------|-------|\n");
+    md.push_str(&format!("| Name | {} |\n", dataset.name));
+    md.push_str(&format!(
+        "| Vertices | {} |\n",
+        fmt_num(dataset.vertices.len() as u64)
+    ));
+    md.push_str(&format!(
+        "| Edges | {} |\n",
+        fmt_num(dataset.edges.len() as u64)
+    ));
+    md.push_str(&format!(
+        "| Type | {} |\n",
+        if dataset.directed {
+            "directed"
+        } else {
+            "undirected"
+        }
+    ));
+    md.push_str(&format!("| BFS Source | {} |\n", source));
+    md.push_str("\n");
+
+    // Configuration
+    md.push_str("## Configuration\n\n");
+    md.push_str("| Field | Value |\n");
+    md.push_str("|-------|-------|\n");
+    md.push_str(&format!("| Runs | {} |\n", runs));
+    md.push_str("| Direction | both |\n");
+    if strata_only {
+        md.push_str("| Engine(s) | Strata |\n");
+    } else {
+        md.push_str("| Engine(s) | Strata, petgraph |\n");
+    }
+    md.push_str("\n");
+
+    // Load Phase
+    md.push_str("## Load Phase\n\n");
+    if strata_only {
+        md.push_str("| Engine | Load Time |\n");
+        md.push_str("|--------|-----------|\n");
+        md.push_str(&format!("| Strata | {} |\n", fmt_ms(strata_load_time)));
+    } else {
+        md.push_str("| Engine | Load Time | Ratio |\n");
+        md.push_str("|--------|-----------|-------|\n");
+        md.push_str(&format!(
+            "| Strata | {} | — |\n",
+            fmt_ms(strata_load_time)
+        ));
+        if let Some(pg_load) = petgraph_load_time {
+            let ratio = if pg_load.as_secs_f64() > 0.0 {
+                format!(
+                    "{:.2}x",
+                    strata_load_time.as_secs_f64() / pg_load.as_secs_f64()
+                )
+            } else {
+                "—".to_string()
+            };
+            md.push_str(&format!(
+                "| petgraph | {} | {} |\n",
+                fmt_ms(pg_load),
+                ratio
+            ));
+        }
+    }
+    md.push_str("\n");
+
+    // BFS Phase
+    md.push_str(&format!("## BFS Phase ({} runs)\n\n", runs));
+    if strata_only {
+        md.push_str("| Metric | Strata |\n");
+        md.push_str("|--------|--------|\n");
+        md.push_str(&format!("| avg | {} |\n", fmt_ms(strata_stats.avg)));
+        md.push_str(&format!("| p50 | {} |\n", fmt_ms(strata_stats.p50)));
+        md.push_str(&format!("| p95 | {} |\n", fmt_ms(strata_stats.p95)));
+        md.push_str(&format!("| p99 | {} |\n", fmt_ms(strata_stats.p99)));
+        md.push_str(&format!("| min | {} |\n", fmt_ms(strata_stats.min)));
+        md.push_str(&format!("| max | {} |\n", fmt_ms(strata_stats.max)));
+        md.push_str(&format!(
+            "| EVPS | {} |\n",
+            fmt_num(strata_stats.avg_evps as u64)
+        ));
+    } else if let Some(ref pg) = petgraph_stats {
+        let ratio =
+            |s: f64, p: f64| -> String {
+                if p > 0.0 {
+                    format!("{:.1}x", s / p)
+                } else {
+                    "—".to_string()
+                }
+            };
+        md.push_str("| Metric | Strata | petgraph | Ratio |\n");
+        md.push_str("|--------|--------|----------|-------|\n");
+        md.push_str(&format!(
+            "| avg | {} | {} | {} |\n",
+            fmt_ms(strata_stats.avg),
+            fmt_ms(pg.avg),
+            ratio(strata_stats.avg.as_secs_f64(), pg.avg.as_secs_f64())
+        ));
+        md.push_str(&format!(
+            "| p50 | {} | {} | {} |\n",
+            fmt_ms(strata_stats.p50),
+            fmt_ms(pg.p50),
+            ratio(strata_stats.p50.as_secs_f64(), pg.p50.as_secs_f64())
+        ));
+        md.push_str(&format!(
+            "| p95 | {} | {} | {} |\n",
+            fmt_ms(strata_stats.p95),
+            fmt_ms(pg.p95),
+            ratio(strata_stats.p95.as_secs_f64(), pg.p95.as_secs_f64())
+        ));
+        md.push_str(&format!(
+            "| p99 | {} | {} | {} |\n",
+            fmt_ms(strata_stats.p99),
+            fmt_ms(pg.p99),
+            ratio(strata_stats.p99.as_secs_f64(), pg.p99.as_secs_f64())
+        ));
+        md.push_str(&format!(
+            "| min | {} | {} | {} |\n",
+            fmt_ms(strata_stats.min),
+            fmt_ms(pg.min),
+            ratio(strata_stats.min.as_secs_f64(), pg.min.as_secs_f64())
+        ));
+        md.push_str(&format!(
+            "| max | {} | {} | {} |\n",
+            fmt_ms(strata_stats.max),
+            fmt_ms(pg.max),
+            ratio(strata_stats.max.as_secs_f64(), pg.max.as_secs_f64())
+        ));
+        let evps_ratio = if strata_stats.avg_evps > 0.0 {
+            format!("{:.1}x", pg.avg_evps / strata_stats.avg_evps)
+        } else {
+            "—".to_string()
+        };
+        md.push_str(&format!(
+            "| EVPS | {} | {} | {} |\n",
+            fmt_num(strata_stats.avg_evps as u64),
+            fmt_num(pg.avg_evps as u64),
+            evps_ratio,
+        ));
+    }
+    md.push_str("\n");
+
+    // Validation
+    md.push_str("## Validation\n\n");
+    md.push_str("| Check | Result |\n");
+    md.push_str("|-------|--------|\n");
+    match ldbc_validation {
+        Some(true) => md.push_str("| LDBC Reference | PASS |\n"),
+        Some(false) => md.push_str("| LDBC Reference | **FAIL** |\n"),
+        None => md.push_str("| LDBC Reference | skipped |\n"),
+    }
+    match cross_validation {
+        Some(true) => md.push_str("| Cross-validation (Strata vs petgraph) | PASS |\n"),
+        Some(false) => md.push_str("| Cross-validation (Strata vs petgraph) | **FAIL** |\n"),
+        None => md.push_str("| Cross-validation | skipped |\n"),
+    }
+    md.push_str("\n");
+
+    // Published References
+    md.push_str("## Published References\n\n");
+    md.push_str("| System | ~EVPS | Notes |\n");
+    md.push_str("|--------|-------|-------|\n");
+    md.push_str("| GraphBLAS/SuiteSparse | ~7,000,000,000 | 128-core server, 4.3B edges |\n");
+    md.push_str("| Oracle PGX.D | ~500,000,000 | graph500-22, 16-core server |\n");
+    md.push_str("| Neo4j | ~2,000,000 | estimated, single machine |\n");
+    md.push_str(&format!(
+        "| Strata (this run) | {} | {}, this machine |\n",
+        fmt_num(strata_stats.avg_evps as u64),
+        dataset.name,
+    ));
+    md.push_str("\n");
+
+    // Raw JSON pointer
+    md.push_str("## Raw Data\n\n");
+    md.push_str(&format!(
+        "Machine-readable results: `{}`\n",
+        json_path.file_name().unwrap_or_default().to_string_lossy()
+    ));
+
+    std::fs::write(&md_path, &md)?;
+    eprintln!("Markdown report saved to {}", md_path.display());
+    Ok(md_path)
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -462,6 +697,8 @@ fn main() {
     // -----------------------------------------------------------------------
 
     let mut strata_times = Vec::with_capacity(config.runs);
+    let mut ldbc_validation_pass: Option<bool> = None;
+    let mut cross_validation_pass: Option<bool> = None;
 
     if config.csv {
         print_csv_header();
@@ -477,6 +714,9 @@ fn main() {
         if let Some(ref reference) = reference {
             if run == 0 || config.validate_only {
                 let validation = validate_bfs(&dataset, &bfs_run.depths, reference);
+                if run == 0 {
+                    ldbc_validation_pass = Some(validation.pass);
+                }
                 if !config.csv {
                     if validation.pass {
                         eprintln!(
@@ -507,6 +747,7 @@ fn main() {
                 let pg_depths = petgraph_bfs(pg_graph, pg_source);
                 let (pass, checked, mismatches) =
                     cross_validate(&dataset, &bfs_run.depths, &pg_depths, id_map);
+                cross_validation_pass = Some(pass);
                 if !config.csv {
                     if pass {
                         eprintln!(
@@ -732,5 +973,21 @@ fn main() {
         eprintln!();
         eprintln!("=== Benchmark complete ===");
     }
-    let _ = recorder.save();
+    if let Ok(json_path) = recorder.save() {
+        if !config.csv {
+            let _ = write_markdown_report(
+                &json_path,
+                &dataset,
+                source,
+                config.runs,
+                config.strata_only,
+                strata_load_time,
+                petgraph_state.as_ref().map(|(_, _, t)| *t),
+                &strata_stats,
+                petgraph_stats.as_ref(),
+                ldbc_validation_pass,
+                cross_validation_pass,
+            );
+        }
+    }
 }
